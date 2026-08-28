@@ -1,4 +1,4 @@
-import type { Allocation, AppBackup, Job } from './types';
+import type { Allocation, AppBackup, Job, AllocationStatus, StatusEvent } from './types';
 
 export const CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR', 'AUD', 'NZD', 'INR'] as const;
 
@@ -47,6 +47,25 @@ export function totals(job: Job) {
   return { held, earned, returned, allocated, unallocated: job.deposit - allocated };
 }
 
+/** Returns a complete trail, including a compatible one-event trail for old records. */
+export function allocationStatusHistory(allocation: Allocation): StatusEvent[] {
+  const history = allocation.statusHistory;
+  if (history?.length) return history;
+  return [{ status: allocation.status, date: allocation.statusDate }];
+}
+
+export function transitionAllocation(allocation: Allocation, status: AllocationStatus, date: string): Allocation {
+  const history = allocationStatusHistory(allocation);
+  if (allocation.status === status) return { ...allocation, statusHistory: history };
+  return {
+    ...allocation,
+    status,
+    statusDate: date,
+    statusHistory: [...history, { status, date }],
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function validateAllocation(job: Job, amount: number, editingId?: string): string | null {
   if (!Number.isInteger(amount) || amount <= 0) return 'Enter an amount greater than zero.';
   const other = job.allocations.filter((a) => a.id !== editingId).reduce((n, a) => n + a.amount, 0);
@@ -64,10 +83,11 @@ export function jobCsv(job: Job): string {
     ['Job', job.title], ['Client', job.client], ['Reference', job.reference],
     ['Deposit received', job.receivedDate], ['Deposit amount', (job.deposit / 100).toFixed(2)],
     ['Currency', job.currency], ['Tax jurisdiction / assumption', job.jurisdiction || 'Not specified'],
-    [], ['Milestone', 'Amount', 'Status', 'Due date', 'Status date', 'Note']
+    [], ['Milestone', 'Amount', 'Status', 'Due date', 'Status date', 'Status history', 'Note']
   ];
   job.allocations.forEach((a) => rows.push([
-    a.title, (a.amount / 100).toFixed(2), a.status, a.dueDate, a.statusDate, a.note
+    a.title, (a.amount / 100).toFixed(2), a.status, a.dueDate, a.statusDate,
+    allocationStatusHistory(a).map((event) => `${event.status} (${event.date})`).join(' → '), a.note
   ]));
   const t = totals(job);
   rows.push([], ['Held balance', (t.held / 100).toFixed(2)], ['Earned', (t.earned / 100).toFixed(2)],
@@ -120,13 +140,25 @@ function validateJob(job: unknown, jobIds: Set<string>) {
     if (!validText(item.id, true) || allocationIds.has(allocationId) || !validText(item.title, true) || !validInteger(item.amount, true)
       || !['held', 'earned', 'returned'].includes(item.status || '') || !validDate(item.dueDate, true) || !validDate(item.statusDate)
       || !validText(item.note) || !validTimestamp(item.createdAt) || !validTimestamp(item.updatedAt)) throw new Error('The backup contains an invalid allocation record.');
+    if (item.statusHistory !== undefined) {
+      if (!Array.isArray(item.statusHistory) || item.statusHistory.length === 0 || !item.statusHistory.every(validStatusEvent)) throw new Error('The backup contains an invalid allocation record.');
+      const latest = item.statusHistory[item.statusHistory.length - 1];
+      if (latest.status !== item.status || latest.date !== item.statusDate) throw new Error('The backup contains an invalid allocation record.');
+    }
     allocationIds.add(allocationId);
     allocated += amount;
   }
   if (allocated > deposit) throw new Error('The backup allocates more than the recorded deposit.');
 }
 
+function validStatusEvent(value: unknown): value is StatusEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Partial<StatusEvent>;
+  return ['held', 'earned', 'returned'].includes(event.status || '') && validDate(event.date);
+}
+
 export function makeAllocation(input: Pick<Allocation, 'title' | 'amount' | 'dueDate' | 'note'>): Allocation {
   const now = new Date().toISOString();
-  return { ...input, id: crypto.randomUUID(), status: 'held', statusDate: now.slice(0, 10), createdAt: now, updatedAt: now };
+  const statusDate = now.slice(0, 10);
+  return { ...input, id: crypto.randomUUID(), status: 'held', statusDate, statusHistory: [{ status: 'held', date: statusDate }], createdAt: now, updatedAt: now };
 }

@@ -1,5 +1,5 @@
 import './styles.css';
-import { backup, CURRENCIES, jobCsv, makeAllocation, money, parseMoney, totals, validateAllocation, validateBackup } from './core';
+import { allocationStatusHistory, backup, CURRENCIES, jobCsv, makeAllocation, money, parseMoney, totals, transitionAllocation, validateAllocation, validateBackup } from './core';
 import { getJobs, removeJob, replaceJobs, saveJob } from './db';
 import { jobPdf } from './pdf';
 import type { AllocationStatus, Job } from './types';
@@ -19,6 +19,7 @@ const importFile = document.querySelector<HTMLInputElement>('#import-file')!;
 let jobs: Job[] = [];
 let selectedId = '';
 let paid = false;
+let licenseNotice = '';
 let toastTimer = 0;
 
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]!);
@@ -113,7 +114,7 @@ function summaryMarkup(job: Job) {
         <div><span><i class="dot returned"></i>Returned</span><strong>${money(t.returned, job.currency)}</strong></div>
         <div><span><i class="dot open"></i>Unallocated</span><strong>${money(t.unallocated, job.currency)}</strong></div>
       </div>
-      <div class="progress-label"><span>${progress}% assigned to scope</span><span>${money(t.allocated, job.currency)} of ${money(job.deposit, job.currency)}</span></div><div class="progress"><span style="width:${progress}%"></span></div>
+      <div class="progress-label"><span>${progress}% assigned to scope</span><span>${money(t.allocated, job.currency)} of ${money(job.deposit, job.currency)}</span></div><progress class="progress" value="${progress}" max="100" aria-label="${progress}% of the deposit assigned to scope">${progress}%</progress>
     </div>
     <section class="trail" aria-labelledby="trail-title">
       <div class="section-head"><div><p class="eyebrow">Held → earned → returned</p><h3 id="trail-title">Allocation trail</h3></div><button class="button" data-action="new-allocation" type="button" ${t.unallocated <= 0 ? 'disabled title="The full deposit is allocated"' : ''}>Allocate scope</button></div>
@@ -126,7 +127,7 @@ function summaryMarkup(job: Job) {
 
 function allocationMarkup(job: Job, allocation: Job['allocations'][number]) {
   return `<li class="allocation-row"><span class="trail-node ${allocation.status}" aria-hidden="true"></span>
-    <div class="allocation-main"><div><strong>${esc(allocation.title)}</strong><span class="status-pill ${allocation.status}">${allocation.status}</span></div>${allocation.note ? `<p>${esc(allocation.note)}</p>` : ''}<small>${allocation.dueDate ? `Expected ${new Date(`${allocation.dueDate}T12:00:00`).toLocaleDateString()}` : 'No expected date'} · Status dated ${new Date(`${allocation.statusDate}T12:00:00`).toLocaleDateString()}</small></div>
+    <div class="allocation-main"><div><strong>${esc(allocation.title)}</strong><span class="status-pill ${allocation.status}">${allocation.status}</span></div>${allocation.note ? `<p>${esc(allocation.note)}</p>` : ''}<small>${allocation.dueDate ? `Expected ${new Date(`${allocation.dueDate}T12:00:00`).toLocaleDateString()}` : 'No expected date'} · Current status ${new Date(`${allocation.statusDate}T12:00:00`).toLocaleDateString()} · ${allocationStatusHistory(allocation).map((event) => `${event.status} ${event.date}`).join(' → ')}</small></div>
     <strong class="allocation-amount">${money(allocation.amount, job.currency)}</strong>
     <label class="status-select"><span class="sr-only">Status for ${esc(allocation.title)}</span><select data-action="status" data-id="${allocation.id}"><option value="held" ${allocation.status === 'held' ? 'selected' : ''}>Held</option><option value="earned" ${allocation.status === 'earned' ? 'selected' : ''}>Earned / billable</option><option value="returned" ${allocation.status === 'returned' ? 'selected' : ''}>Returned</option></select></label>
     <div class="row-actions"><button class="icon-button" data-action="edit-allocation" data-id="${allocation.id}" type="button" aria-label="Edit ${esc(allocation.title)}">✎</button><button class="icon-button danger" data-action="delete-allocation" data-id="${allocation.id}" type="button" aria-label="Delete ${esc(allocation.title)}">×</button></div>
@@ -136,7 +137,7 @@ function allocationMarkup(job: Job, allocation: Job['allocations'][number]) {
 function render() {
   if (jobs.length && !selected()) selectedId = jobs[0].id;
   const current = selected();
-  app.innerHTML = `<aside class="job-index" aria-label="Jobs">
+  app.innerHTML = `${licenseNotice ? `<p class="license-notice" role="status">${esc(licenseNotice)} <button class="link-button" data-action="license" type="button">Review license options</button></p>` : ''}<aside class="job-index" aria-label="Jobs">
     <div class="index-head"><div><p class="eyebrow">Your ledger</p><h2>${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h2></div><button class="icon-button" data-action="new-job" aria-label="Add job" type="button">+</button></div>
     ${jobs.length ? `<nav aria-label="Choose a job"><ul>${jobs.map((job) => { const t = totals(job); return `<li><button class="job-tab ${job.id === selectedId ? 'active' : ''}" data-action="select-job" data-id="${job.id}" type="button"><span>${esc(job.title)}</span><small>${esc(job.client)}</small><strong>${money(t.held + t.unallocated, job.currency)} held</strong></button></li>`; }).join('')}</ul></nav>` : `<div class="index-empty"><span aria-hidden="true">01</span><p>Your first deposit starts here.</p></div>`}
     <div class="data-tools"><button class="link-button" data-action="backup" type="button">Back up all</button><button class="link-button" data-action="import" type="button">Restore</button></div>
@@ -185,9 +186,15 @@ async function verifyLicense(token: string, showResult = false) {
     const response = await fetch(`${BILLING}/products/${SLUG}/verify?license=${encodeURIComponent(token)}`);
     if (!response.ok) throw new Error('The license service is unavailable. Try again when you are online.');
     const result = await response.json() as { valid: boolean; reason: string };
-    localStorage.setItem(VERDICT_KEY, JSON.stringify({ valid: result.valid, checkedAt: Date.now() })); paid = result.valid;
-    if (!result.valid) throw new Error('This license is not active for Scope Deposit Ledger.');
-    localStorage.setItem(LICENSE_KEY, token); render();
+    localStorage.setItem(VERDICT_KEY, JSON.stringify({ valid: result.valid, checkedAt: Date.now() }));
+    paid = result.valid;
+    licenseNotice = result.valid ? '' : 'Your Unlimited license is no longer active. Your local records and exports are unchanged.';
+    localStorage.setItem(LICENSE_KEY, token);
+    render();
+    if (!result.valid) {
+      if (showResult && error) error.textContent = 'This license is not active for Scope Deposit Ledger.';
+      return;
+    }
     if (showResult) { closeModal(); say('Unlimited jobs restored.'); }
   } catch (err) {
     if (showResult && error) error.textContent = err instanceof Error ? err.message : 'The license could not be verified.';
@@ -217,13 +224,15 @@ document.addEventListener('click', async (event) => {
   if (action === 'backup') { download(JSON.stringify(backup(jobs), null, 2), `scope-ledger-backup-${today()}.json`, 'application/json'); say('Backup downloaded.'); }
   if (action === 'import') importFile.click();
   if (action === 'license') licenseModal();
+  if (action === 'storage-retry') location.reload();
 });
 
 document.addEventListener('change', async (event) => {
   const select = (event.target as HTMLElement).closest<HTMLSelectElement>('select[data-action="status"]'); if (!select) return;
   const job = selected(); const allocation = job?.allocations.find((a) => a.id === select.dataset.id); if (!job || !allocation) return;
-  allocation.status = select.value as AllocationStatus; allocation.statusDate = today(); allocation.updatedAt = new Date().toISOString();
-  await mutate(job, `Marked “${allocation.title}” ${allocation.status}.`);
+  const changed = transitionAllocation(allocation, select.value as AllocationStatus, today());
+  job.allocations = job.allocations.map((item) => item.id === allocation.id ? changed : item);
+  await mutate(job, `Marked “${changed.title}” ${changed.status}.`);
 });
 
 document.addEventListener('submit', async (event) => {
@@ -255,6 +264,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register(`/sw.js?v=${e
 
 async function start() {
   try { await initLicense(); jobs = await getJobs(); selectedId = jobs[0]?.id || ''; render(); }
-  catch (err) { app.innerHTML = `<section class="storage-error" role="alert"><p class="eyebrow">Storage unavailable</p><h2>Your ledger could not open.</h2><p>${esc(err instanceof Error ? err.message : 'Check this browser’s site-storage settings and reload.')}</p><button class="button" onclick="location.reload()">Try again</button></section>`; }
+  catch (err) { app.innerHTML = `<section class="storage-error" role="alert"><p class="eyebrow">Storage unavailable</p><h2>Your ledger could not open.</h2><p>${esc(err instanceof Error ? err.message : 'Check this browser’s site-storage settings and reload.')}</p><button class="button" data-action="storage-retry" type="button">Try again</button></section>`; }
 }
 void start();

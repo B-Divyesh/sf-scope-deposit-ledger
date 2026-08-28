@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+const RELEASE_VERSION = '1.0.2';
+
 async function createJob(page: import('@playwright/test').Page, title = 'Safe job') {
   await page.getByRole('button', { name: 'Record a deposit' }).click();
   await page.getByLabel(/Job or scope name/).fill(title);
@@ -37,6 +39,7 @@ test('records, allocates, persists and exports a deposit trail', async ({ page }
   await expect(page.getByText('$1,600.00')).toBeVisible();
   await page.getByLabel('Status for Materials ordered').selectOption('earned');
   await expect(page.getByText('earned', { exact: true })).toBeVisible();
+  await expect(page.getByText(/held .* → earned/)).toBeVisible();
 
   const csv = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export CSV' }).click();
@@ -48,6 +51,20 @@ test('records, allocates, persists and exports a deposit trail', async ({ page }
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Workshop cabinetry' })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('reconciles an invalid cached or return license by locking and showing a quiet notice', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sb_license:scope-deposit-ledger', 'stale-license');
+    localStorage.setItem('sb_license:scope-deposit-ledger:verdict', JSON.stringify({ valid: true, checkedAt: 0 }));
+  });
+  await page.route('https://api.sociobot.in/api/v1/products/scope-deposit-ledger/verify?license=*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': 'http://127.0.0.1:4173' }, body: JSON.stringify({ valid: false, reason: 'revoked' }) });
+  });
+  await page.goto('/?license=qa-invalid-token');
+  await expect(page.getByText(/Unlimited license is no longer active/)).toBeVisible();
+  await expect(page.getByText('Unlimited unlocked')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/license=/);
 });
 
 test('works offline after first load and has no serious accessibility violations', async ({ page, context }) => {
@@ -125,9 +142,9 @@ test('stamps the installed start URL and active cache with this release version'
   await page.goto('/');
   await page.waitForFunction(() => navigator.serviceWorker?.controller !== null);
   const manifest = await (await page.request.get('/manifest.webmanifest')).json() as { start_url: string };
-  expect(manifest.start_url).toContain('v=1.0.1');
+  expect(manifest.start_url).toContain(`v=${RELEASE_VERSION}`);
   const cacheNames = await page.evaluate((): Promise<string[]> => globalThis.caches.keys());
-  expect(cacheNames).toContain('scope-ledger-shell-1.0.1');
+  expect(cacheNames).toContain(`scope-ledger-shell-${RELEASE_VERSION}`);
 });
 
 test('keeps the populated ledger usable at a 390px mobile viewport', async ({ page }) => {
@@ -136,6 +153,11 @@ test('keeps the populated ledger usable at a 390px mobile viewport', async ({ pa
   await createJob(page, 'Mobile job');
   await expect(page.getByRole('button', { name: 'Allocate scope' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  for (const target of [page.getByRole('button', { name: 'New job' }), page.getByRole('link', { name: 'Privacy' }), page.getByRole('link', { name: 'Terms' })]) {
+    const box = await target.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
 });
 
 test('privacy and terms are available as direct static routes', async ({ page }) => {

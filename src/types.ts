@@ -1,5 +1,10 @@
 export type AllocationStatus = 'held' | 'earned' | 'returned';
 
+export interface StatusEvent {
+  status: AllocationStatus;
+  date: string;
+}
+
 export interface Allocation {
   id: string;
   title: string;
@@ -7,6 +12,11 @@ export interface Allocation {
   status: AllocationStatus;
   dueDate: string;
   statusDate: string;
+  /**
+   * Append-only record of every held/earned/returned transition. It is
+   * optional only so ledgers created before this release remain readable.
+   */
+  statusHistory?: StatusEvent[];
   note: string;
   createdAt: string;
   updatedAt: string;

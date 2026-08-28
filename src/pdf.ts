@@ -1,8 +1,20 @@
-import { money, totals } from './core';
+import { allocationStatusHistory, money, totals } from './core';
 import type { Job } from './types';
 
-const ascii = (value: string) => value.normalize('NFKD').replace(/[^\x20-\x7E]/g, '?');
-const escapePdf = (value: string) => ascii(value).replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)');
+/**
+ * PDF strings are encoded as UTF-16BE hex strings. The previous ASCII-only
+ * conversion silently changed names such as Café 改装 into question marks.
+ * A BOM makes the text portable to PDF consumers and keeps the source text
+ * intact for copy/search/accessibility tools.
+ */
+function pdfText(value: string): string {
+  let hex = 'FEFF';
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    hex += unit.toString(16).padStart(4, '0').toUpperCase();
+  }
+  return `<${hex}>`;
+}
 
 function wrap(value: string, width = 78): string[] {
   const words = value.split(/\s+/);
@@ -27,6 +39,7 @@ export function jobPdf(job: Job): ArrayBuffer {
     ...job.allocations.flatMap((a, i) => [
       `${i + 1}. ${a.title} — ${money(a.amount, job.currency)}`,
       `   Status: ${a.status.toUpperCase()} | Status date: ${a.statusDate || '-'} | Due: ${a.dueDate || '-'}`,
+      `   Status trail: ${allocationStatusHistory(a).map((event) => `${event.status} ${event.date}`).join(' → ')}`,
       ...(a.note ? wrap(`   Note: ${a.note}`, 86) : [])
     ]), '',
     `Still held: ${money(t.held, job.currency)}`,
@@ -54,7 +67,7 @@ export function jobPdf(job: Job): ArrayBuffer {
     const commands = ['BT', '/F1 10 Tf', '54 742 Td', '14 TL'];
     chunk.forEach((line, lineIndex) => {
       if (lineIndex > 0) commands.push('T*');
-      commands.push(`(${escapePdf(line)}) Tj`);
+      commands.push(`${pdfText(line)} Tj`);
     });
     commands.push('ET');
     const stream = commands.join('\n');

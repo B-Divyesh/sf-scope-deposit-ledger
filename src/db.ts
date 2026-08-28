@@ -1,3 +1,4 @@
+import { allocationStatusHistory } from './core';
 import type { Job } from './types';
 
 const DB_NAME = 'scope-deposit-ledger';
@@ -25,7 +26,10 @@ async function transact<T>(mode: IDBTransactionMode, work: (store: IDBObjectStor
 
 export async function getJobs(): Promise<Job[]> {
   const jobs = await transact<Job[]>('readonly', (store) => store.getAll());
-  return jobs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return jobs.map((job) => ({
+    ...job,
+    allocations: job.allocations.map((allocation) => ({ ...allocation, statusHistory: allocationStatusHistory(allocation) }))
+  })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export const saveJob = (job: Job) => transact<IDBValidKey>('readwrite', (store) => store.put(job));

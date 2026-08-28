@@ -13,4 +13,14 @@ describe('static deployment policy', () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).not.toContain('*');
   });
+
+  it('keeps Azure deployment-control files out of the public SW precache and avoids CSP-blocked handlers', () => {
+    const stamp = readFileSync(resolve(root, 'scripts/stamp-release.mjs'), 'utf8');
+    const app = readFileSync(resolve(root, 'src/app.ts'), 'utf8');
+    expect(stamp).toContain("file !== '/staticwebapp.config.json'");
+    expect(stamp).toContain("file !== '/_headers'");
+    expect(app).not.toContain('onclick=');
+    expect(app).not.toContain('style="width:');
+    expect(app).toContain('<progress class="progress"');
+  });
 });

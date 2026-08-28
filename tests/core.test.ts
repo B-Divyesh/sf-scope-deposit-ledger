@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backup, jobCsv, parseMoney, totals, validateAllocation, validateBackup } from '../src/core';
+import { allocationStatusHistory, backup, jobCsv, parseMoney, totals, transitionAllocation, validateAllocation, validateBackup } from '../src/core';
 import type { Job } from '../src/types';
 import { jobPdf } from '../src/pdf';
 
@@ -40,6 +40,31 @@ describe('portable records', () => {
     expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe('%PDF-1.4');
     expect(bytes.byteLength).toBeGreaterThan(500);
   });
+  it('retains every dated status transition in JSON, CSV, and PDF exports', () => {
+    const earned = transitionAllocation(job.allocations[0], 'earned', '2026-09-01');
+    const returned = transitionAllocation(earned, 'returned', '2026-09-10');
+    const trailed = { ...job, allocations: [returned] };
+    expect(allocationStatusHistory(returned)).toEqual([
+      { status: 'held', date: '2026-08-01' },
+      { status: 'earned', date: '2026-09-01' },
+      { status: 'returned', date: '2026-09-10' }
+    ]);
+    expect(backup([trailed]).jobs[0].allocations[0].statusHistory).toContainEqual({ status: 'earned', date: '2026-09-01' });
+    expect(jobCsv(trailed)).toContain('earned (2026-09-01)');
+    expect(pdfStrings(jobPdf(trailed))).toContain('earned 2026-09-01');
+  });
+  it('preserves international client and scope text in PDF strings', () => {
+    const international = {
+      ...job,
+      title: 'Café 改装', client: 'Müller 工房', jurisdiction: 'Ontario · tax excluded',
+      allocations: [{ ...job.allocations[0], title: '材料 & planning' }]
+    };
+    const text = pdfStrings(jobPdf(international));
+    expect(text).toContain('Café 改装');
+    expect(text).toContain('Müller 工房');
+    expect(text).toContain('材料 & planning');
+    expect(text).not.toContain('Cafe?');
+  });
   it('accepts its own complete schema and rejects incomplete or unsafe records', () => {
     expect(validateBackup(backup([job])).jobs).toHaveLength(1);
     expect(() => validateBackup({ schema: 2, jobs: [] })).toThrow('not supported');
@@ -48,3 +73,11 @@ describe('portable records', () => {
     expect(() => validateBackup(backup([{ ...job, allocations: [{ ...job.allocations[0], amount: 100001 }] }]))).toThrow('more than');
   });
 });
+
+function pdfStrings(pdf: ArrayBuffer): string {
+  const source = new TextDecoder().decode(pdf);
+  return [...source.matchAll(/<FEFF([0-9A-F]+)> Tj/g)].map((match) => {
+    const bytes = Uint8Array.from((match[1].match(/.{1,2}/g) || []).map((pair) => Number.parseInt(pair, 16)));
+    return new TextDecoder('utf-16be').decode(bytes);
+  }).join('\n');
+}

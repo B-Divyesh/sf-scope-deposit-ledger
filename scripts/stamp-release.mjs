@@ -17,7 +17,9 @@ const swTemplate = await readFile(join(root, 'public/sw.js'), 'utf8');
 const allFiles = await files(dist);
 const precache = allFiles
   .map((file) => `/${relative(dist, file).split(sep).join('/')}`)
-  .filter((file) => !file.startsWith('/.vite/') && !file.endsWith('.map') && file !== '/sw.js' && file !== '/manifest.webmanifest')
+  // Azure consumes this deployment configuration; it is deliberately not a
+  // public URL and must never make service-worker installation fail.
+  .filter((file) => !file.startsWith('/.vite/') && !file.endsWith('.map') && file !== '/sw.js' && file !== '/manifest.webmanifest' && file !== '/staticwebapp.config.json' && file !== '/_headers')
   .sort();
 const sw = swTemplate
   .replaceAll('__RELEASE_VERSION__', version)
