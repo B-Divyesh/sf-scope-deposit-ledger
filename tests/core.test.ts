@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { backup, jobCsv, parseMoney, totals, validateAllocation, validateBackup } from '../src/core';
 import type { Job } from '../src/types';
+import { jobPdf } from '../src/pdf';
 
 const job: Job = {
   id: 'j1', title: 'Kitchen refit', client: 'A. Client', reference: 'K-14', currency: 'USD',
@@ -27,6 +28,11 @@ describe('portable records', () => {
     const csv = jobCsv({ ...job, title: 'Kitchen, phase "A"' });
     expect(csv).toContain('"Kitchen, phase ""A"""');
     expect(csv).toContain('not an invoice');
+  });
+  it('creates a downloadable PDF document', () => {
+    const bytes = new Uint8Array(jobPdf(job));
+    expect(new TextDecoder().decode(bytes.slice(0, 8))).toBe('%PDF-1.4');
+    expect(bytes.byteLength).toBeGreaterThan(500);
   });
   it('accepts its own schema and rejects unknown versions', () => {
     expect(validateBackup(backup([job])).jobs).toHaveLength(1);
