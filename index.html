@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f0e6" />
+    <meta name="description" content="A private, offline ledger that shows exactly what a client deposit is held against." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="preload" href="/fonts/atkinson-regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
+    <title>Scope Deposit Ledger — Know what every deposit covers</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to ledger</a>
+    <header class="masthead">
+      <a class="wordmark" href="/" aria-label="Scope Deposit Ledger home">
+        <span class="mark" aria-hidden="true">§</span><span>Scope Deposit Ledger</span>
+      </a>
+      <div class="header-actions">
+        <span id="network-state" class="network" role="status"><span aria-hidden="true">●</span> On-device</span>
+        <button class="quiet-button" id="theme-toggle" type="button" aria-label="Switch color theme">Night</button>
+        <button class="button small" data-action="new-job" type="button">New job</button>
+      </div>
+    </header>
+    <main id="main">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">A private record of held money</p>
+          <h1 id="page-title">Show exactly what the deposit covers.</h1>
+          <p>Turn one advance payment into a clear, dated trail of scope—held, earned, or returned. No invoice suite required.</p>
+          <button class="button" data-action="new-job" type="button">Record a deposit</button>
+          <p class="trust-note"><span aria-hidden="true">⌁</span> Saved only on this device · works offline</p>
+        </div>
+        <picture class="hero-art">
+          <source media="(max-width: 700px)" srcset="/assets/ledger-garden-720.webp" />
+          <img src="/assets/ledger-garden.webp" width="1280" height="853" alt="A coral glass vessel pours golden material into three measured green stone channels." decoding="async" fetchpriority="high" />
+        </picture>
+      </section>
+      <section id="ledger-app" class="app-shell" aria-label="Deposit ledger">
+        <p class="loading-state" role="status">Opening your on-device ledger…</p>
+      </section>
+    </main>
+    <footer>
+      <p>Built for clear client conversations, not accounting advice.</p>
+      <nav aria-label="Legal and product links"><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><button class="link-button" type="button" data-action="license">Unlock</button></nav>
+      <p class="provenance">Original generated scenery · no analytics or trackers</p>
+    </footer>
+    <dialog id="app-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <input id="import-file" type="file" accept="application/json,.json" hidden />
+    <script type="module" src="/src/app.ts"></script>
+  </body>
+</html>

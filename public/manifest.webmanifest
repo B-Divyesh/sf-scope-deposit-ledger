@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Scope Deposit Ledger",
+  "short_name": "Scope Ledger",
+  "description": "A private, offline record of what client deposits are held against.",
+  "start_url": "/?source=installed&v=1",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f0e6",
+  "theme_color": "#f4f0e6",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,5 @@
+Atkinson Hyperlegible Copyright 2019 Braille Institute of America, Inc.
+Fraunces Copyright 2020 The Fraunces Project Authors.
+
+Both font families are licensed under the SIL Open Font License, Version 1.1:
+https://openfontlicense.org/open-font-license-official-text/
