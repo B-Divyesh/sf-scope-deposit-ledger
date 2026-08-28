@@ -1,0 +1,10 @@
+{
+  "checkout": {
+    "enabled": false,
+    "last_checked": "2026-08-28T06:21:04Z",
+    "last_error": {
+      "error": "enabled factory product",
+      "status": 404
+    }
+  }
+}

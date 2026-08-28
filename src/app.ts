@@ -9,6 +9,7 @@ const LICENSE_KEY = `sb_license:${SLUG}`;
 const VERDICT_KEY = `${LICENSE_KEY}:verdict`;
 const BILLING = 'https://api.sociobot.in/api/v1';
 const CHECKOUT_URL = `${BILLING}/products/${SLUG}/checkout`;
+const CHECKOUT_STATUS_URL = '/checkout-status.json';
 const FREE_JOB_LIMIT = 3;
 declare const __RELEASE_VERSION__: string;
 
@@ -99,13 +100,13 @@ function checkoutMarkup(state: CheckoutState) {
 
 async function getCheckoutState(): Promise<Exclude<CheckoutState, 'checking'>> {
   try {
-    // A configured checkout redirects to the hosted merchant. In a manual
-    // redirect response browsers expose that as opaque, while a catalog 404
-    // remains readable through the API's CORS policy.
-    const response = await fetch(CHECKOUT_URL, { redirect: 'manual' });
-    if (response.type === 'opaqueredirect' || response.ok || (response.status >= 300 && response.status < 400)) return 'available';
-    if (response.status === 404) return 'unavailable';
-    return 'unreachable';
+    // This same-origin release setting is updated only after the factory has
+    // registered the hosted checkout. Probing a known 404 directly creates a
+    // browser console error even when the response is handled.
+    const response = await fetch(CHECKOUT_STATUS_URL, { cache: 'no-store' });
+    if (!response.ok) return 'unreachable';
+    const status = await response.json() as { checkout?: { enabled?: boolean } };
+    return status.checkout?.enabled === true ? 'available' : 'unavailable';
   } catch {
     return 'unreachable';
   }

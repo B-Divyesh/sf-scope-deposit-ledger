@@ -23,4 +23,13 @@ describe('static deployment policy', () => {
     expect(app).not.toContain('style="width:');
     expect(app).toContain('<progress class="progress"');
   });
+
+  it('ships the checkout availability state with the reproduced catalog 404 disabled', () => {
+    const status = JSON.parse(readFileSync(resolve(root, 'public/checkout-status.json'), 'utf8')) as { checkout: { enabled: boolean; last_error: { error: string; status: number } } };
+    expect(status.checkout).toEqual({
+      enabled: false,
+      last_checked: '2026-08-28T06:21:04Z',
+      last_error: { error: 'enabled factory product', status: 404 }
+    });
+  });
 });

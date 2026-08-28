@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const RELEASE_VERSION = '1.0.3';
+const RELEASE_VERSION = '1.0.4';
 
 async function createJob(page: import('@playwright/test').Page, title = 'Safe job') {
   await page.getByRole('button', { name: 'Record a deposit' }).click();
@@ -68,12 +68,15 @@ test('reconciles an invalid cached or return license by locking and showing a qu
 });
 
 test('does not advertise an unbuyable Unlimited checkout when the verifier 404 is returned', async ({ page }) => {
-  await page.route('https://api.sociobot.in/api/v1/products/scope-deposit-ledger/checkout', async (route) => {
+  const checkoutRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url() === 'https://api.sociobot.in/api/v1/products/scope-deposit-ledger/checkout') checkoutRequests.push(request.url());
+  });
+  await page.route('**/checkout-status.json', async (route) => {
     await route.fulfill({
-      status: 404,
+      status: 200,
       contentType: 'application/json',
-      headers: { 'access-control-allow-origin': 'http://127.0.0.1:4173' },
-      body: JSON.stringify({ error: 'enabled factory product', status: 404 })
+      body: JSON.stringify({ checkout: { enabled: false, last_error: { error: 'enabled factory product', status: 404 } } })
     });
   });
   await page.goto('/');
@@ -82,6 +85,7 @@ test('does not advertise an unbuyable Unlimited checkout when the verifier 404 i
   await expect(page.getByRole('button', { name: 'Buy unlimited' })).toHaveCount(0);
   await expect(page.locator(`a[href="https://api.sociobot.in/api/v1/products/scope-deposit-ledger/checkout"]`)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Verify and restore' })).toBeVisible();
+  expect(checkoutRequests).toEqual([]);
 });
 
 test('works offline after first load and has no serious accessibility violations', async ({ page, context }) => {
