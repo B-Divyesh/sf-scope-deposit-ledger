@@ -71,6 +71,27 @@ the release tests. Normal first load makes no billing request. License
 availability is a same-origin release setting; only a configured purchase or
 license restore contacts the Sociobot API.
 
+## Deployment and live verification
+
+Committed repair source: `c9af64a` (`fix: ship checkout availability state`),
+pushed to `origin/main`, then deployed as the static `dist/` artifact using
+the factory static deployment configuration. Azure Static Web Apps deployment
+`58fb8e18-7c88-4498-aca1-6016bcc538f5` completed successfully on 2026-08-28
+UTC; the custom domain was `Ready` and HTTPS returned 200.
+
+Live identity is the deployed repair: `index.html` references
+`main-BHhrC2HH.js`, manifest start URL contains `v=1.0.4`, service worker cache
+is `scope-ledger-shell-1.0.4`, and `/checkout-status.json` contains the disabled
+404 state. Live response headers include HSTS, CSP, referrer policy, and
+`nosniff`.
+
+The factory URL verifier loaded the live page in 793 ms with zero page/console
+errors and confirmed title, `lang=en`, one `<h1>`, `<main>`, and no missing
+image alt text or unnamed buttons. A separate live Chromium pass verified
+keyboard skip-to-main, the no-purchase 404 fallback, zero axe serious/critical
+violations, 390 px `scrollWidth` of 390, active service worker `v=1.0.4`,
+offline reload, and first-run requests restricted to the product origin.
+
 ## Required factory follow-up
 
 Register and enable the Sociobot one-time `$29` product
