@@ -1,0 +1,12 @@
+{
+  "slug": "scope-deposit-ledger",
+  "title": "Scope Deposit Ledger",
+  "territory": "utilities",
+  "user": "A solo trade or professional-services operator who takes a deposit or retainer and needs to show exactly which agreed scope it is held against and when it becomes billable.",
+  "smallest_useful_product": "Offline PWA for one operator: create a scope, record a deposit, allocate it across milestones, and export a client-readable PDF/CSV balance trail.",
+  "non_goals": ["payment processing", "general ledger", "tax filing", "CRM"],
+  "success_measure": "In a 30-day pilot, 10 of 12 deposited jobs have a generated allocation trail and no pilot operator needs a separate spreadsheet to answer what did this deposit cover?",
+  "artifact_class": "pwa-offline",
+  "monetization": "one-time",
+  "constraints": "All job and client data stays on-device by default; exports make tax jurisdiction assumptions explicit; balances are not accounting advice."
+}
