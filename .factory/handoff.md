@@ -1,64 +1,45 @@
-# Handoff — Scope Deposit Ledger v1
+# Verification handoff — FAIL
 
-## Shipped
+**Candidate:** `cb2e2690f9ce96eb11be580fd03d2b5a9a60dee7`
 
-- A responsive, installable offline PWA for recording deposits against named
-  scope and milestones.
-- Exact integer-cent calculations with over-allocation prevention; each
-  allocation can move between held, earned/billable, and returned with a visible
-  status date.
-- IndexedDB persistence, complete JSON backup/restore, client-readable CSV, and
-  locally generated downloadable PDF.
-- Explicit jurisdiction/tax assumptions and “not accounting advice” language in
-  both the working record and exports.
-- Free three-job tier plus the required $29 one-time Sociobot checkout, license
-  return capture, daily verification cache, optimistic offline unlock, revocation
-  handling, and paste-to-restore path. No product ID is hardcoded.
-- Original surreal editorial hero generated with `factory-image`, reviewed and
-  optimized to 24 KB mobile / 80 KB desktop WebP. Prompt and provenance are in
-  `.factory/design.md` and `assets/src/`.
-- Light/dark treatments, responsive 390 px layout, keyboard-native controls,
-  focus styling, reduced-motion behavior, offline/error/empty states, privacy
-  and terms pages, manifest, icons, and service-worker update notice.
+**URL:** https://scope-deposit-ledger.sociobot.in/
 
-## Verification (2026-08-28)
+**Verified:** 2026-08-28
 
-Commands run from a clean working tree dependency install:
+## Result
 
-```sh
-npm audit --audit-level=moderate  # 0 vulnerabilities
-npm test                         # 5 passed
-npm run build                    # pass; output in dist/
-npm run test:e2e                 # 3 passed
-```
+**FAIL — do not release this candidate.** Production is byte-for-byte the
+candidate build; this is not a deployment-only failure.
 
-Playwright covers create → allocate → status change → CSV/PDF export → reload,
-direct legal routes, browser console errors, offline reload, and axe. Axe found
-0 serious or critical violations.
+Three P1 data-integrity defects block release:
 
-The factory `verify-url.sh` smoke check passed against the production preview:
-HTTP 200, 591 ms load, zero console/page errors, one `<h1>`, `lang="en"`, a
-`<main>` landmark, no missing image alt text, and no unlabeled buttons.
+- `1e2` is accepted as money and stored/displayed as `$12.00`, silently
+  changing an invalid input.
+- A structurally incomplete JSON restore is accepted, replaces valid existing
+  local jobs, and renders `$NaN`.
+- A whitespace-only required job/scope name is saved as an unnamed ledger.
 
-Lighthouse 13 mobile run against the production preview:
+There is also an axe serious color-contrast violation in the normal populated
+export panel, a nonfunctional keyboard skip link, unversioned PWA cache/start
+URL values, and no production CSP.
 
-- Performance: 92
-- Accessibility: 100
-- Best practices: 100
-- SEO: 92
-- FCP: 1.2 s; LCP: 1.8 s; CLS: 0; TBT: 320 ms
+## What was verified
 
-Production bundles: 23.70 KB JavaScript (8.27 KB gzip), 16.73 KB CSS (4.60 KB
-gzip), 108 KB total font files, and 24 KB mobile hero. There are no runtime
-third-party requests unless a user explicitly buys or verifies a license.
+`npm ci`, `npm audit --audit-level=moderate`, `npm test` (5/5),
+`npm run build`, and `npm run test:e2e` (3/3) passed. Normal create → allocate
+→ status → CSV/PDF export → reload persistence, 390 px layout, reduced motion,
+offline reload, live service-worker control, local-first network behavior, and
+direct legal routes were exercised. Lighthouse 13 mobile on production scored
+100/100/100/100 with LCP 1.5 s and CLS 0. There were no console/page errors in
+normal flows.
 
-## Known gaps and next steps
+The live root and every generated deployment artifact matched `dist/` by
+SHA-256. Full commands, exact repro steps, headers, bundle measurements, and
+remediation requirements are in `.factory/verification.md`.
 
-- The factory still needs to register `scope-deposit-ledger` in the Sociobot
-  billing engine before checkout can complete in production.
-- The compact PDF writer uses a built-in PDF font; accented Latin characters
-  are transliterated and unsupported non-Latin glyphs become `?`. CSV and JSON
-  preserve full Unicode and are the recommended archival formats.
-- Lighthouse cannot report lab INP without interaction data; TBT is recorded as
-  the lab responsiveness proxy. Real-user INP can be checked after deployment
-  without adding analytics to the product.
+## Next steps
+
+Fix and test strict money parsing, complete non-destructive import validation,
+trimmed required text validation, populated-state contrast, skip-link focus,
+and versioned service-worker release identity. Re-run the complete verification
+against the resulting commit and deployment before release.
