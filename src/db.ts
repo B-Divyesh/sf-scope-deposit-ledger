@@ -39,6 +39,7 @@ export async function replaceJobs(jobs: Job[]): Promise<void> {
     store.clear();
     jobs.forEach((job) => store.put(job));
     tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => reject(new Error('The backup could not be restored.'));
+    tx.onerror = () => { db.close(); reject(new Error('The backup could not be restored.')); };
+    tx.onabort = () => { db.close(); reject(new Error('The backup could not be restored.')); };
   });
 }

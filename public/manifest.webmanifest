@@ -3,7 +3,7 @@
   "name": "Scope Deposit Ledger",
   "short_name": "Scope Ledger",
   "description": "A private, offline record of what client deposits are held against.",
-  "start_url": "/?source=installed&v=1",
+  "start_url": "/?source=installed&v=__RELEASE_VERSION__",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f4f0e6",

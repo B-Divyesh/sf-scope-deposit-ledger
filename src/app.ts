@@ -9,6 +9,7 @@ const LICENSE_KEY = `sb_license:${SLUG}`;
 const VERDICT_KEY = `${LICENSE_KEY}:verdict`;
 const BILLING = 'https://api.sociobot.in/api/v1';
 const FREE_JOB_LIMIT = 3;
+declare const __RELEASE_VERSION__: string;
 
 const app = document.querySelector<HTMLElement>('#ledger-app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#app-dialog')!;
@@ -153,11 +154,15 @@ async function submitJob(form: HTMLFormElement) {
   const data = new FormData(form); const id = form.dataset.id;
   const deposit = parseMoney(String(data.get('deposit')));
   const error = form.querySelector<HTMLElement>('.form-error')!;
-  if (!Number.isInteger(deposit) || deposit <= 0) { error.textContent = 'Enter a deposit amount greater than zero.'; return; }
+  const title = String(data.get('title')).trim();
+  const client = String(data.get('client')).trim();
+  if (!title) { error.textContent = 'Enter a job or scope name.'; return; }
+  if (!client) { error.textContent = 'Enter a client name.'; return; }
+  if (!Number.isInteger(deposit) || deposit <= 0) { error.textContent = 'Enter a deposit amount greater than zero using up to two decimal places.'; return; }
   const existing = jobs.find((job) => job.id === id);
   if (existing && totals(existing).allocated > deposit) { error.textContent = `The new deposit cannot be lower than ${money(totals(existing).allocated, existing.currency)} already allocated.`; return; }
   const now = new Date().toISOString();
-  const job: Job = { id: existing?.id || crypto.randomUUID(), title: String(data.get('title')).trim(), client: String(data.get('client')).trim(), reference: String(data.get('reference')).trim(), deposit, currency: String(data.get('currency')), receivedDate: String(data.get('receivedDate')), jurisdiction: String(data.get('jurisdiction')).trim(), notes: String(data.get('notes')).trim(), allocations: existing?.allocations || [], createdAt: existing?.createdAt || now, updatedAt: now };
+  const job: Job = { id: existing?.id || crypto.randomUUID(), title, client, reference: String(data.get('reference')).trim(), deposit, currency: String(data.get('currency')), receivedDate: String(data.get('receivedDate')), jurisdiction: String(data.get('jurisdiction')).trim(), notes: String(data.get('notes')).trim(), allocations: existing?.allocations || [], createdAt: existing?.createdAt || now, updatedAt: now };
   try { await mutate(job, existing ? 'Job details saved.' : 'Deposit ledger created.'); closeModal(); } catch (err) { error.textContent = err instanceof Error ? err.message : 'The job could not be saved.'; }
 }
 
@@ -165,9 +170,11 @@ async function submitAllocation(form: HTMLFormElement) {
   const job = selected(); if (!job) return;
   const data = new FormData(form); const id = form.dataset.id;
   const amount = parseMoney(String(data.get('amount'))); const error = form.querySelector<HTMLElement>('.form-error')!;
+  const title = String(data.get('title')).trim();
+  if (!title) { error.textContent = 'Enter a milestone or scope item.'; return; }
   const validation = validateAllocation(job, amount, id); if (validation) { error.textContent = validation; return; }
   const existing = job.allocations.find((a) => a.id === id);
-  const allocation = existing ? { ...existing, title: String(data.get('title')).trim(), amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim(), updatedAt: new Date().toISOString() } : makeAllocation({ title: String(data.get('title')).trim(), amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim() });
+  const allocation = existing ? { ...existing, title, amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim(), updatedAt: new Date().toISOString() } : makeAllocation({ title, amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim() });
   job.allocations = existing ? job.allocations.map((a) => a.id === id ? allocation : a) : [...job.allocations, allocation];
   try { await mutate(job, existing ? 'Allocation updated.' : 'Scope allocated.'); closeModal(); } catch (err) { error.textContent = err instanceof Error ? err.message : 'The allocation could not be saved.'; }
 }
@@ -242,7 +249,7 @@ function setTheme(theme: string) { document.documentElement.dataset.theme = them
 themeButton.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'night' ? 'day' : 'night'));
 setTheme(localStorage.getItem('scope-ledger-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day'));
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').then((registration) => {
+if ('serviceWorker' in navigator) navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(__RELEASE_VERSION__)}`).then((registration) => {
   registration.addEventListener('updatefound', () => { const worker = registration.installing; worker?.addEventListener('statechange', () => { if (worker.state === 'installed' && navigator.serviceWorker.controller) { say('A fresh version is ready. Reload to update.'); } }); });
 }).catch(() => { /* app remains usable without install support */ });
 

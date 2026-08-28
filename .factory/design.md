@@ -19,8 +19,8 @@ masthead. No gradients, stock finance iconography, or decorative chart chrome.
 - `sheet #FFFDF7`: active writing surface.
 - `ink #17211D`: near-black green, 15.2:1 on paper.
 - `muted #56605B`: supporting copy, 6.1:1 on paper.
-- `moss #1E5A43`: primary action and “earned”, white at 7.7:1.
-- `coral #B53F32`: editorial marker and danger, ≥4.5:1 on paper.
+- `moss #11402E`: primary action and “earned”, white at 11.2:1.
+- `coral #621C14`: editorial marker and danger, ≥4.5:1 on paper and sky surfaces.
 - `gold #9B650B`: held value; paired with text/shape, never color alone.
 - `sky #D9E7E2`: selected surfaces and focus accompaniment.
 - `night #101713`, `night-sheet #18231E`, `night-text #F4F0E6`: explicit dark treatment.

@@ -3,9 +3,30 @@ import type { Allocation, AppBackup, Job } from './types';
 export const CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR', 'AUD', 'NZD', 'INR'] as const;
 
 export function parseMoney(value: string): number {
-  const cleaned = value.replace(/[^0-9.-]/g, '');
-  if (!cleaned || !Number.isFinite(Number(cleaned))) return Number.NaN;
-  return Math.round(Number(cleaned) * 100);
+  // Money is entered by people, not calculated from free-form text. Never
+  // "clean" an invalid value: doing so can turn 1e2 into 12 without notice.
+  const symbols = new Intl.NumberFormat().formatToParts(1234567.89);
+  const decimal = symbols.find((part) => part.type === 'decimal')?.value || '.';
+  const group = (symbols.find((part) => part.type === 'group')?.value || ',').replaceAll('\u00a0', ' ').replaceAll('\u202f', ' ');
+  let input = value.trim().replaceAll('\u00a0', ' ').replaceAll('\u202f', ' ');
+  if (!input) return Number.NaN;
+
+  // Permit a conventional currency symbol or one of this product's currency
+  // codes only at an edge. Anything else is invalid rather than discarded.
+  input = input.replace(/^(?:[\p{Sc}]|USD|CAD|GBP|EUR|AUD|NZD|INR)\s*/u, '');
+  input = input.replace(/\s*(?:[\p{Sc}]|USD|CAD|GBP|EUR|AUD|NZD|INR)$/u, '');
+  if (!input) return Number.NaN;
+
+  const escapedGroup = group.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedDecimal = decimal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const integer = `(?:\\d+|\\d{1,3}(?:${escapedGroup}\\d{3})+)`;
+  const match = input.match(new RegExp(`^(-?)(${integer})(?:${escapedDecimal}(\\d{1,2}))?$`));
+  if (!match) return Number.NaN;
+
+  const whole = match[2].split(group).join('');
+  const fraction = (match[3] || '').padEnd(2, '0');
+  const cents = Number(whole) * 100 + Number(fraction || '0');
+  return Number.isSafeInteger(cents) ? (match[1] ? -cents : cents) : Number.NaN;
 }
 
 export function money(cents: number, currency = 'USD'): string {
@@ -62,13 +83,47 @@ export function backup(jobs: Job[]): AppBackup {
 export function validateBackup(value: unknown): AppBackup {
   if (!value || typeof value !== 'object') throw new Error('The selected file is not a ledger backup.');
   const data = value as Partial<AppBackup>;
-  if (data.schema !== 1 || !Array.isArray(data.jobs)) throw new Error('This backup version is not supported.');
-  for (const job of data.jobs) {
-    if (!job || typeof job.id !== 'string' || typeof job.title !== 'string' || !Array.isArray(job.allocations)) {
-      throw new Error('The backup contains an invalid job record.');
-    }
-  }
+  if (data.schema !== 1 || !Array.isArray(data.jobs) || !validTimestamp(data.exportedAt)) throw new Error('This backup version is not supported.');
+  const jobIds = new Set<string>();
+  for (const job of data.jobs) validateJob(job, jobIds);
   return data as AppBackup;
+}
+
+const validText = (value: unknown, required = false) => typeof value === 'string' && (!required || value.trim().length > 0);
+const validInteger = (value: unknown, positive = false) => typeof value === 'number' && Number.isSafeInteger(value) && (!positive || value > 0);
+function validDate(value: unknown, optional = false) {
+  if (typeof value !== 'string') return false;
+  if (optional && value === '') return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+const validTimestamp = (value: unknown) => typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value));
+
+function validateJob(job: unknown, jobIds: Set<string>) {
+  if (!job || typeof job !== 'object') throw new Error('The backup contains an invalid job record.');
+  const record = job as Partial<Job>;
+  const id = record.id as string;
+  const deposit = record.deposit as number;
+  if (!validText(record.id, true) || jobIds.has(id) || !validText(record.title, true) || !validText(record.client, true)
+    || !validText(record.reference) || !validInteger(record.deposit, true) || !CURRENCIES.includes(record.currency as typeof CURRENCIES[number])
+    || !validDate(record.receivedDate) || !validText(record.jurisdiction) || !validText(record.notes) || !validTimestamp(record.createdAt)
+    || !validTimestamp(record.updatedAt) || !Array.isArray(record.allocations)) throw new Error('The backup contains an invalid job record.');
+  jobIds.add(id);
+  const allocationIds = new Set<string>();
+  let allocated = 0;
+  for (const allocation of record.allocations) {
+    if (!allocation || typeof allocation !== 'object') throw new Error('The backup contains an invalid allocation record.');
+    const item = allocation as Partial<Allocation>;
+    const allocationId = item.id as string;
+    const amount = item.amount as number;
+    if (!validText(item.id, true) || allocationIds.has(allocationId) || !validText(item.title, true) || !validInteger(item.amount, true)
+      || !['held', 'earned', 'returned'].includes(item.status || '') || !validDate(item.dueDate, true) || !validDate(item.statusDate)
+      || !validText(item.note) || !validTimestamp(item.createdAt) || !validTimestamp(item.updatedAt)) throw new Error('The backup contains an invalid allocation record.');
+    allocationIds.add(allocationId);
+    allocated += amount;
+  }
+  if (allocated > deposit) throw new Error('The backup allocates more than the recorded deposit.');
 }
 
 export function makeAllocation(input: Pick<Allocation, 'title' | 'amount' | 'dueDate' | 'note'>): Allocation {
