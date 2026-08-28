@@ -36,6 +36,10 @@ Playwright covers create → allocate → status change → CSV/PDF export → r
 direct legal routes, browser console errors, offline reload, and axe. Axe found
 0 serious or critical violations.
 
+The factory `verify-url.sh` smoke check passed against the production preview:
+HTTP 200, 591 ms load, zero console/page errors, one `<h1>`, `lang="en"`, a
+`<main>` landmark, no missing image alt text, and no unlabeled buttons.
+
 Lighthouse 13 mobile run against the production preview:
 
 - Performance: 92
