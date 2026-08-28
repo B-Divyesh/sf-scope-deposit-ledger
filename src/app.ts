@@ -8,6 +8,7 @@ const SLUG = 'scope-deposit-ledger';
 const LICENSE_KEY = `sb_license:${SLUG}`;
 const VERDICT_KEY = `${LICENSE_KEY}:verdict`;
 const BILLING = 'https://api.sociobot.in/api/v1';
+const CHECKOUT_URL = `${BILLING}/products/${SLUG}/checkout`;
 const FREE_JOB_LIMIT = 3;
 declare const __RELEASE_VERSION__: string;
 
@@ -84,18 +85,55 @@ function allocationForm(job: Job, allocationId?: string) {
   </form>`);
 }
 
+type CheckoutState = 'checking' | 'available' | 'unavailable' | 'unreachable';
+
+function checkoutMarkup(state: CheckoutState) {
+  if (state === 'available') return `<p class="price"><strong>$29</strong> one-time purchase</p>
+    <p>The free ledger includes three jobs, complete CSV/PDF exports, backup and offline use. Unlock removes the job limit on this device.</p>
+    <button class="button full" data-action="checkout" type="button">Buy unlimited</button>
+    <p class="merchant-note">Secure checkout and refunds are handled by Sociobot/Dodo, the merchant of record. A refunded license is revoked.</p>`;
+  if (state === 'unavailable') return `<p class="checkout-message" role="status">Unlimited purchases are temporarily unavailable. Your three free ledgers, local records, exports, backup, and offline use remain available. Existing licenses can still be restored below.</p>`;
+  if (state === 'unreachable') return `<p class="checkout-message" role="status">Secure checkout cannot be reached right now. Try again when you are online; your local records are unchanged.</p><button class="quiet-button full" data-action="retry-checkout" type="button">Check checkout again</button>`;
+  return `<p class="checkout-message" role="status">Checking whether secure checkout is available…</p>`;
+}
+
+async function getCheckoutState(): Promise<Exclude<CheckoutState, 'checking'>> {
+  try {
+    // A configured checkout redirects to the hosted merchant. In a manual
+    // redirect response browsers expose that as opaque, while a catalog 404
+    // remains readable through the API's CORS policy.
+    const response = await fetch(CHECKOUT_URL, { redirect: 'manual' });
+    if (response.type === 'opaqueredirect' || response.ok || (response.status >= 300 && response.status < 400)) return 'available';
+    if (response.status === 404) return 'unavailable';
+    return 'unreachable';
+  } catch {
+    return 'unreachable';
+  }
+}
+
+async function refreshCheckoutState() {
+  const state = await getCheckoutState();
+  const region = dialog.querySelector<HTMLElement>('[data-checkout-state]');
+  if (region) region.innerHTML = checkoutMarkup(state);
+  return state;
+}
+
+async function startCheckout() {
+  const region = dialog.querySelector<HTMLElement>('[data-checkout-state]');
+  if (region) region.innerHTML = checkoutMarkup('checking');
+  if (await refreshCheckoutState() === 'available') location.assign(CHECKOUT_URL);
+}
+
 function licenseModal() {
   const token = localStorage.getItem(LICENSE_KEY) || '';
   openModal(`<section class="license-panel">
     <div class="dialog-head"><div><p class="eyebrow">A durable tool, once</p><h2 id="dialog-title">Unlock unlimited jobs</h2></div><button class="icon-button" type="button" data-action="close" aria-label="Close dialog">×</button></div>
-    <p class="price"><strong>$29</strong> one-time purchase</p>
-    <p>The free ledger includes three jobs, complete CSV/PDF exports, backup and offline use. Unlock removes the job limit on this device.</p>
-    <a class="button full" href="${BILLING}/products/${SLUG}/checkout">Buy unlimited</a>
-    <p class="merchant-note">Secure checkout and refunds are handled by Sociobot/Dodo, the merchant of record. A refunded license is revoked.</p>
+    <div data-checkout-state>${checkoutMarkup('checking')}</div>
     <hr />
     <form data-form="license"><label>Have a license? Paste it here<input name="license" autocomplete="off" value="${esc(token)}" /></label><p class="form-error" role="alert"></p><button class="quiet-button full" type="submit">Verify and restore</button></form>
     <p class="legal-inline"><a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p>
   </section>`);
+  void refreshCheckoutState();
 }
 
 function summaryMarkup(job: Job) {
@@ -141,7 +179,7 @@ function render() {
     <div class="index-head"><div><p class="eyebrow">Your ledger</p><h2>${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h2></div><button class="icon-button" data-action="new-job" aria-label="Add job" type="button">+</button></div>
     ${jobs.length ? `<nav aria-label="Choose a job"><ul>${jobs.map((job) => { const t = totals(job); return `<li><button class="job-tab ${job.id === selectedId ? 'active' : ''}" data-action="select-job" data-id="${job.id}" type="button"><span>${esc(job.title)}</span><small>${esc(job.client)}</small><strong>${money(t.held + t.unallocated, job.currency)} held</strong></button></li>`; }).join('')}</ul></nav>` : `<div class="index-empty"><span aria-hidden="true">01</span><p>Your first deposit starts here.</p></div>`}
     <div class="data-tools"><button class="link-button" data-action="backup" type="button">Back up all</button><button class="link-button" data-action="import" type="button">Restore</button></div>
-    <button class="unlock-card ${paid ? 'is-paid' : ''}" data-action="license" type="button"><span>${paid ? 'Unlimited unlocked' : 'Free · 3 jobs'}</span><small>${paid ? 'License active on this device' : '$29 once for unlimited →'}</small></button>
+    <button class="unlock-card ${paid ? 'is-paid' : ''}" data-action="license" type="button"><span>${paid ? 'Unlimited unlocked' : 'Free · 3 jobs'}</span><small>${paid ? 'License active on this device' : 'Check Unlimited availability →'}</small></button>
   </aside>
   ${current ? summaryMarkup(current) : `<section class="empty-ledger"><div class="empty-number">01</div><p class="eyebrow">Begin with the agreement</p><h2>Give held money a named place.</h2><p>Record the deposit, split it across agreed work, then share a balance trail your client can read without an accounting login.</p><button class="button" data-action="new-job" type="button">Record your first deposit</button><ul><li>Private on this device</li><li>PDF and CSV included</li><li>Works without a connection</li></ul></section>`}`;
 }
@@ -224,6 +262,8 @@ document.addEventListener('click', async (event) => {
   if (action === 'backup') { download(JSON.stringify(backup(jobs), null, 2), `scope-ledger-backup-${today()}.json`, 'application/json'); say('Backup downloaded.'); }
   if (action === 'import') importFile.click();
   if (action === 'license') licenseModal();
+  if (action === 'retry-checkout') void refreshCheckoutState();
+  if (action === 'checkout') { event.preventDefault(); await startCheckout(); }
   if (action === 'storage-retry') location.reload();
 });
 

@@ -16,8 +16,9 @@ Live: <https://scope-deposit-ledger.sociobot.in>
 - Downloads a client-readable PDF or CSV for each job.
 - Exports and restores the complete ledger as JSON.
 - Stores all job data in IndexedDB and works after the network disappears.
-- Includes three jobs free; a $29 one-time Sociobot license unlocks unlimited
-  jobs. Exports, accessibility, backups, and offline use are never gated.
+- Includes three jobs free. When the hosted Sociobot checkout is available, a
+  $29 one-time license unlocks unlimited jobs. Exports, accessibility,
+  backups, and offline use are never gated.
 
 It is deliberately not an invoicing system, payment processor, tax calculator,
 general ledger, or CRM.
