@@ -1,115 +1,70 @@
-# Repair handoff — Scope Deposit Ledger 1.0.4
+# Verification handoff — FAIL
 
-**Work order:** `scope-deposit-ledger-repair-3`
-**Base verifier report:** `c376b4466795704843edd6aaafc8bd626360a9d1` / `.factory/verification-3.md`
-**Candidate repaired:** `ae6c85a98cc8585e6566abf25740bfe9c6d05e65`
-**Artifact/deploy class:** static offline PWA (`dist/`)
+**Work order:** `scope-deposit-ledger-verify-4`
 
-## Release-blocking finding and repair
+**Candidate tested:** `f554088c444fb05d89072568883d548f3a79f087`
 
-The verifier's sole P1 was reproduced on 2026-08-28 UTC:
+**Production tested:** <https://scope-deposit-ledger.sociobot.in/>
 
-```text
-GET https://api.sociobot.in/api/v1/products/scope-deposit-ledger/checkout
-HTTP 404
-{"error":"enabled factory product","status":404}
-```
+**Date:** 2026-08-28 UTC
 
-The root cause is an absent/disabled Sociobot billing-catalog product, outside
-this repository. Repository rules prohibit changing billing configuration.
+## Result
 
-The product repair prevents a customer-facing false purchase claim while
-preserving the free limit, existing-license restore/verification, and all
-ledger behavior:
+**FAIL — P1 silent cross-tab data loss.** A stale second tab can overwrite a
+newer IndexedDB job and erase allocations/status history while saving an
+unrelated job-detail edit. This breaks the product's core durable-evidence job.
 
-- The license dialog now reads a same-origin release setting only after an
-  operator intentionally opens license options. It is explicitly disabled
-  with the verifier's 404 reason until the factory registers checkout; this
-  avoids an otherwise-handled 404 becoming a browser-console error.
-- A configured hosted-checkout redirect exposes the `$29` purchase action; a
-  404 instead says that Unlimited purchases are temporarily unavailable and
-  does not render an unbuyable link or price claim.
-- Network failures give a retry action; the restore-license form remains
-  usable in every state.
-- The rail, README, and terms no longer advertise a purchase before checkout
-  availability is confirmed.
-- The PWA release stamp/cache was advanced from `1.0.2` to `1.0.4` so an
-  installed client receives the updated shell.
+Production is otherwise the exact candidate build: all checked runtime files
+matched local `dist/` byte-for-byte. The earlier deployment-only concern is not
+present.
 
-Exact regression coverage was added in `tests/e2e/ledger.spec.ts` and
-`tests/release.test.ts`: they retain the verifier's exact 404 JSON as the
-disabled release state and assert that no `Buy unlimited` control, checkout
-anchor, or checkout request is present, while restore remains available.
+## Reproduction
 
-## Verification evidence
+1. In tab A, create a `$1,000` job.
+2. Open tab B on the same origin and let it load the job.
+3. In tab A, add a `$400` allocation.
+4. In tab B, edit only the scope note and save.
+5. Reload tab A: the allocation is gone.
 
-Ran from a fresh dependency installation:
+Fresh evidence: allocation visible before the stale save; afterward DOM count
+was 0 and direct IndexedDB inspection returned `storedAllocationCount: 0`.
+
+Required repair: merge job-detail edits against the latest stored record,
+detect revisions/conflicts, notify or refresh other tabs, give the operator a
+visible recovery choice, and add a two-page regression test.
+
+## Verification performed
 
 ```sh
-npm ci                                    # PASS — 60 packages
-npm audit --audit-level=moderate          # PASS — 0 vulnerabilities
-npm test                                  # PASS — 11 tests
-npm run build                             # PASS — tsc + Vite + release stamp
-npm run test:e2e                          # PASS — 10 Playwright tests
+npm ci                              # PASS — 60 packages, 0 vulnerabilities
+npm audit --audit-level=moderate    # PASS
+npm test                            # PASS — 11/11
+npx tsc --noEmit                    # PASS
+npm run build                       # PASS — exact production build, dist/
+npm run test:e2e                    # PASS — 10/10
 ```
 
-The Playwright suite covers the primary deposit/allocation/export/persistence
-journey, malformed input and restore rejection, 404 checkout regression,
-license reconciliation, keyboard skip-to-main/focus, axe serious/critical
-checks in empty/populated/dialog/dark states, offline reload after service
-worker control, active cache/manifest release `1.0.4`, direct legal routes,
-and a populated 390×844 mobile view with no horizontal overflow and 44 px
-New job/Privacy/Terms targets. It also records no page/console errors in the
-primary workflow. The existing service-worker update notification behavior is
-unchanged; changing the release cache name exercises the install/update path.
+Independent live checks passed for the normal ledger journey, exact-cent and
+over-allocation boundaries, invalid-input recovery, held/earned/returned
+history, edit guard, CSV/PDF/JSON exports, delete cancellation/confirmation,
+backup restore, three-job limit, real invalid-license return, IndexedDB reload,
+offline reload, worker update toast, keyboard/dialog focus, reduced motion,
+390 px mobile layout/touch targets, dark/light axe scans, request privacy,
+security/cache headers, and deploy identity.
 
-`dist/index.html` is at the static output root. Build sizes: main JS 28,790 B
-(9.84 KB gzip), CSS 17,285 B (4.71 KB gzip), self-hosted fonts 102,036 B total.
-The static deployment policy remains CSP-restricted to self plus the explicit
-Sociobot API, with no third-party runtime scripts or fonts; this is checked by
-the release tests. Normal first load makes no billing request. License
-availability is a same-origin release setting; only a configured purchase or
-license restore contacts the Sociobot API.
+Lighthouse mobile: Performance 100, Accessibility 100, Best Practices 100;
+LCP 1.5 s, TBT 0 ms, CLS 0, 141 KiB transfer. Main JS is 28,794 B, CSS 17,285
+B, fonts 102,036 B, and mobile hero 24,070 B.
 
-## Deployment and live verification
+## Other findings / next steps
 
-Committed repair source: `c9af64a` (`fix: ship checkout availability state`),
-pushed to `origin/main`, then deployed as the static `dist/` artifact using
-the factory static deployment configuration. Azure Static Web Apps deployment
-`58fb8e18-7c88-4498-aca1-6016bcc538f5` completed successfully on 2026-08-28
-UTC; the custom domain was `Ready` and HTTPS returned 200.
+- **P2:** hosted checkout remains externally disabled: direct request returns
+  `404 {"error":"enabled factory product","status":404}`. The UI now hides the
+  broken purchase action and honestly preserves the useful three-job product;
+  enable the catalog item before offering the one-time purchase.
+- **P3:** axe reports one repeated moderate
+  `landmark-complementary-is-top-level` warning for the nested job-index aside;
+  serious/critical count is zero.
+- Full evidence is in `.factory/verification-4.md`.
 
-Live identity is the deployed repair: `index.html` references
-`main-BHhrC2HH.js`, manifest start URL contains `v=1.0.4`, service worker cache
-is `scope-ledger-shell-1.0.4`, and `/checkout-status.json` contains the disabled
-404 state. Live response headers include HSTS, CSP, referrer policy, and
-`nosniff`.
-
-The factory URL verifier loaded the live page in 793 ms with zero page/console
-errors and confirmed title, `lang=en`, one `<h1>`, `<main>`, and no missing
-image alt text or unnamed buttons. A separate live Chromium pass verified
-keyboard skip-to-main, the no-purchase 404 fallback, zero axe serious/critical
-violations, 390 px `scrollWidth` of 390, active service worker `v=1.0.4`,
-offline reload, and first-run requests restricted to the product origin.
-
-## Required factory follow-up
-
-Register and enable the Sociobot one-time `$29` product
-`scope-deposit-ledger` with return URL
-`https://scope-deposit-ledger.sociobot.in/`. This is the remaining external
-catalog operation, not a source-code change. Once enabled, re-check hosted
-checkout, payment return `?license=` storage, validation, and restore in a
-fresh browser profile, then set `public/checkout-status.json` to
-`{"checkout":{"enabled":true}}` in the release that follows. The repaired
-UI will then reveal the purchase action without a customer encountering the
-catalog 404.
-
-## Run locally
-
-```sh
-npm ci
-npm test
-npm run build
-npm run test:e2e
-npm run preview
-```
+No product code was modified during verification.
