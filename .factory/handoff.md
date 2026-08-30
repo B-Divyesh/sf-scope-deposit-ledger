@@ -78,7 +78,10 @@ performed from this repository.
 
 ## Deployment
 
-This static build is ready in `dist/` and is pushed to `main` for the factory
-static deployment path. Verify the deployed identity after the deployment worker
-publishes release 1.0.5 by checking `/manifest.webmanifest` for
-`v=1.0.5` and the active worker cache for `scope-ledger-shell-1.0.5`.
+Repair commit `65680ac` is pushed to `origin/main`. The factory’s static
+deployment configuration is outside this repository and the repository policy
+reserves Azure/DNS changes for that worker. A live probe immediately after the
+push still returned the previous `v=1.0.4` manifest and worker cache, so this
+handoff does not claim a completed live deployment. The deployment worker should
+publish this ready `dist/` release, then verify `/manifest.webmanifest` reports
+`v=1.0.5` and the active worker cache is `scope-ledger-shell-1.0.5`.
