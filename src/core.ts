@@ -128,7 +128,8 @@ function validateJob(job: unknown, jobIds: Set<string>) {
   if (!validText(record.id, true) || jobIds.has(id) || !validText(record.title, true) || !validText(record.client, true)
     || !validText(record.reference) || !validInteger(record.deposit, true) || !CURRENCIES.includes(record.currency as typeof CURRENCIES[number])
     || !validDate(record.receivedDate) || !validText(record.jurisdiction) || !validText(record.notes) || !validTimestamp(record.createdAt)
-    || !validTimestamp(record.updatedAt) || !Array.isArray(record.allocations)) throw new Error('The backup contains an invalid job record.');
+    || !validTimestamp(record.updatedAt) || (record.revision !== undefined && (!validInteger(record.revision) || record.revision < 0))
+    || !Array.isArray(record.allocations)) throw new Error('The backup contains an invalid job record.');
   jobIds.add(id);
   const allocationIds = new Set<string>();
   let allocated = 0;

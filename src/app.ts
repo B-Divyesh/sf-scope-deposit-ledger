@@ -1,6 +1,6 @@
 import './styles.css';
 import { allocationStatusHistory, backup, CURRENCIES, jobCsv, makeAllocation, money, parseMoney, totals, transitionAllocation, validateAllocation, validateBackup } from './core';
-import { getJobs, removeJob, replaceJobs, saveJob } from './db';
+import { createJob, getJobs, mutateStoredJob, removeJob, replaceJobs, updateJobDetails } from './db';
 import { jobPdf } from './pdf';
 import type { AllocationStatus, Job } from './types';
 
@@ -11,6 +11,7 @@ const BILLING = 'https://api.sociobot.in/api/v1';
 const CHECKOUT_URL = `${BILLING}/products/${SLUG}/checkout`;
 const CHECKOUT_STATUS_URL = '/checkout-status.json';
 const FREE_JOB_LIMIT = 3;
+const SYNC_KEY = `${SLUG}:last-mutation`;
 declare const __RELEASE_VERSION__: string;
 
 const app = document.querySelector<HTMLElement>('#ledger-app')!;
@@ -22,7 +23,11 @@ let jobs: Job[] = [];
 let selectedId = '';
 let paid = false;
 let licenseNotice = '';
+let conflictNotice = '';
 let toastTimer = 0;
+const tabId = crypto.randomUUID();
+const seenMutationIds = new Set<string>();
+const ledgerChannel = 'BroadcastChannel' in window ? new BroadcastChannel(`${SLUG}:changes`) : null;
 
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]!);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -52,7 +57,7 @@ function closeModal() { dialog.close(); dialogContent.replaceChildren(); }
 
 function jobForm(job?: Job) {
   const currencies = CURRENCIES.map((code) => `<option ${job?.currency === code ? 'selected' : ''}>${code}</option>`).join('');
-  openModal(`<form method="dialog" data-form="job" data-id="${esc(job?.id || '')}">
+  openModal(`<form method="dialog" data-form="job" data-id="${esc(job?.id || '')}" data-revision="${job?.revision || 0}">
     <div class="dialog-head"><div><p class="eyebrow">${job ? 'Update record' : 'New held deposit'}</p><h2 id="dialog-title">${job ? 'Edit job details' : 'Record a deposit'}</h2></div><button class="icon-button" value="cancel" aria-label="Close dialog" type="button" data-action="close">×</button></div>
     <div class="form-grid">
       <label class="wide">Job or scope name <span aria-hidden="true">*</span><input name="title" required maxlength="80" value="${esc(job?.title)}" autocomplete="off" /></label>
@@ -72,7 +77,7 @@ function jobForm(job?: Job) {
 function allocationForm(job: Job, allocationId?: string) {
   const allocation = job.allocations.find((item) => item.id === allocationId);
   const available = totals(job).unallocated + (allocation?.amount || 0);
-  openModal(`<form method="dialog" data-form="allocation" data-id="${esc(allocation?.id || '')}">
+  openModal(`<form method="dialog" data-form="allocation" data-id="${esc(allocation?.id || '')}" data-revision="${job.revision || 0}">
     <div class="dialog-head"><div><p class="eyebrow">${esc(job.title)}</p><h2 id="dialog-title">${allocation ? 'Edit allocation' : 'Allocate held money'}</h2></div><button class="icon-button" type="button" data-action="close" aria-label="Close dialog">×</button></div>
     <p class="available-line">Available to allocate <strong>${money(available, job.currency)}</strong></p>
     <div class="form-grid">
@@ -176,7 +181,7 @@ function allocationMarkup(job: Job, allocation: Job['allocations'][number]) {
 function render() {
   if (jobs.length && !selected()) selectedId = jobs[0].id;
   const current = selected();
-  app.innerHTML = `${licenseNotice ? `<p class="license-notice" role="status">${esc(licenseNotice)} <button class="link-button" data-action="license" type="button">Review license options</button></p>` : ''}<aside class="job-index" aria-label="Jobs">
+  app.innerHTML = `${licenseNotice ? `<p class="license-notice" role="status">${esc(licenseNotice)} <button class="link-button" data-action="license" type="button">Review license options</button></p>` : ''}${conflictNotice ? `<section class="merge-notice" role="status"><strong>Another tab changed this job.</strong><span>${esc(conflictNotice)}</span><button class="link-button" data-action="review-merged-job" type="button">Review latest trail</button></section>` : ''}<aside class="job-index" aria-label="Jobs">
     <div class="index-head"><div><p class="eyebrow">Your ledger</p><h2>${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h2></div><button class="icon-button" data-action="new-job" aria-label="Add job" type="button">+</button></div>
     ${jobs.length ? `<nav aria-label="Choose a job"><ul>${jobs.map((job) => { const t = totals(job); return `<li><button class="job-tab ${job.id === selectedId ? 'active' : ''}" data-action="select-job" data-id="${job.id}" type="button"><span>${esc(job.title)}</span><small>${esc(job.client)}</small><strong>${money(t.held + t.unallocated, job.currency)} held</strong></button></li>`; }).join('')}</ul></nav>` : `<div class="index-empty"><span aria-hidden="true">01</span><p>Your first deposit starts here.</p></div>`}
     <div class="data-tools"><button class="link-button" data-action="backup" type="button">Back up all</button><button class="link-button" data-action="import" type="button">Restore</button></div>
@@ -185,9 +190,58 @@ function render() {
   ${current ? summaryMarkup(current) : `<section class="empty-ledger"><div class="empty-number">01</div><p class="eyebrow">Begin with the agreement</p><h2>Give held money a named place.</h2><p>Record the deposit, split it across agreed work, then share a balance trail your client can read without an accounting login.</p><button class="button" data-action="new-job" type="button">Record your first deposit</button><ul><li>Private on this device</li><li>PDF and CSV included</li><li>Works without a connection</li></ul></section>`}`;
 }
 
-async function mutate(job: Job, message: string) {
-  job.updatedAt = new Date().toISOString();
-  await saveJob(job); jobs = await getJobs(); selectedId = job.id; render(); say(message);
+async function refreshLedger() {
+  jobs = await getJobs();
+  if (!jobs.some((job) => job.id === selectedId)) selectedId = jobs[0]?.id || '';
+  render();
+}
+
+type LedgerMutationMessage = { type: 'ledger-mutated'; id: string; source: string };
+
+function rememberMutation(id: string) {
+  seenMutationIds.add(id);
+  if (seenMutationIds.size > 40) seenMutationIds.delete(seenMutationIds.values().next().value!);
+}
+
+function readMutation(value: string | null): LedgerMutationMessage | null {
+  if (!value) return null;
+  try {
+    const message = JSON.parse(value) as Partial<LedgerMutationMessage>;
+    return message.type === 'ledger-mutated' && typeof message.id === 'string' && typeof message.source === 'string' ? message as LedgerMutationMessage : null;
+  } catch { return null; }
+}
+
+async function receiveLedgerMutation(message: LedgerMutationMessage) {
+  if (message.source === tabId || seenMutationIds.has(message.id)) return;
+  rememberMutation(message.id);
+  try {
+    await refreshLedger();
+    say('Ledger updated in another tab.');
+  } catch { /* a local storage failure is already handled by the main screen */ }
+}
+
+function notifyLedgerMutation() {
+  const message: LedgerMutationMessage = { type: 'ledger-mutated', id: crypto.randomUUID(), source: tabId };
+  rememberMutation(message.id);
+  ledgerChannel?.postMessage(message);
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify(message)); } catch { /* BroadcastChannel remains available when storage events are blocked. */ }
+}
+
+ledgerChannel?.addEventListener('message', (event: MessageEvent<LedgerMutationMessage>) => { void receiveLedgerMutation(event.data); });
+addEventListener('storage', (event) => {
+  if (event.key === SYNC_KEY) {
+    const message = readMutation(event.newValue);
+    if (message) void receiveLedgerMutation(message);
+  }
+});
+
+async function persistJobMutation(id: string, expectedRevision: number, change: (current: Job) => Job, message: string) {
+  const result = await mutateStoredJob(id, expectedRevision, change);
+  selectedId = result.job.id;
+  await refreshLedger();
+  notifyLedgerMutation();
+  say(result.conflicted ? `${message} The latest trail from another tab was kept.` : message);
+  return result;
 }
 
 async function submitJob(form: HTMLFormElement) {
@@ -199,11 +253,26 @@ async function submitJob(form: HTMLFormElement) {
   if (!title) { error.textContent = 'Enter a job or scope name.'; return; }
   if (!client) { error.textContent = 'Enter a client name.'; return; }
   if (!Number.isInteger(deposit) || deposit <= 0) { error.textContent = 'Enter a deposit amount greater than zero using up to two decimal places.'; return; }
-  const existing = jobs.find((job) => job.id === id);
-  if (existing && totals(existing).allocated > deposit) { error.textContent = `The new deposit cannot be lower than ${money(totals(existing).allocated, existing.currency)} already allocated.`; return; }
+  const details = { title, client, reference: String(data.get('reference')).trim(), deposit, currency: String(data.get('currency')), receivedDate: String(data.get('receivedDate')), jurisdiction: String(data.get('jurisdiction')).trim(), notes: String(data.get('notes')).trim() };
   const now = new Date().toISOString();
-  const job: Job = { id: existing?.id || crypto.randomUUID(), title, client, reference: String(data.get('reference')).trim(), deposit, currency: String(data.get('currency')), receivedDate: String(data.get('receivedDate')), jurisdiction: String(data.get('jurisdiction')).trim(), notes: String(data.get('notes')).trim(), allocations: existing?.allocations || [], createdAt: existing?.createdAt || now, updatedAt: now };
-  try { await mutate(job, existing ? 'Job details saved.' : 'Deposit ledger created.'); closeModal(); } catch (err) { error.textContent = err instanceof Error ? err.message : 'The job could not be saved.'; }
+  try {
+    if (id) {
+      const result = await updateJobDetails(id, Number(form.dataset.revision) || 0, details);
+      selectedId = result.job.id;
+      if (result.conflicted) conflictNotice = 'Your job details were merged with the latest allocation trail. Review it before sharing an export.';
+      await refreshLedger();
+      notifyLedgerMutation();
+      say(result.conflicted ? 'Job details merged with the latest allocation trail.' : 'Job details saved.');
+    } else {
+      const job: Job = { id: crypto.randomUUID(), ...details, allocations: [], createdAt: now, updatedAt: now };
+      await createJob(job);
+      selectedId = job.id;
+      await refreshLedger();
+      notifyLedgerMutation();
+      say('Deposit ledger created.');
+    }
+    closeModal();
+  } catch (err) { error.textContent = err instanceof Error ? err.message : 'The job could not be saved.'; }
 }
 
 async function submitAllocation(form: HTMLFormElement) {
@@ -212,11 +281,20 @@ async function submitAllocation(form: HTMLFormElement) {
   const amount = parseMoney(String(data.get('amount'))); const error = form.querySelector<HTMLElement>('.form-error')!;
   const title = String(data.get('title')).trim();
   if (!title) { error.textContent = 'Enter a milestone or scope item.'; return; }
-  const validation = validateAllocation(job, amount, id); if (validation) { error.textContent = validation; return; }
-  const existing = job.allocations.find((a) => a.id === id);
-  const allocation = existing ? { ...existing, title, amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim(), updatedAt: new Date().toISOString() } : makeAllocation({ title, amount, dueDate: String(data.get('dueDate')), note: String(data.get('note')).trim() });
-  job.allocations = existing ? job.allocations.map((a) => a.id === id ? allocation : a) : [...job.allocations, allocation];
-  try { await mutate(job, existing ? 'Allocation updated.' : 'Scope allocated.'); closeModal(); } catch (err) { error.textContent = err instanceof Error ? err.message : 'The allocation could not be saved.'; }
+  const dueDate = String(data.get('dueDate')); const note = String(data.get('note')).trim();
+  try {
+    const result = await persistJobMutation(job.id, Number(form.dataset.revision) || 0, (current) => {
+      const validation = validateAllocation(current, amount, id);
+      if (validation) throw new Error(validation);
+      const existing = current.allocations.find((allocation) => allocation.id === id);
+      if (id && !existing) throw new Error('This allocation changed in another tab. The latest trail is shown below.');
+      const allocation = existing ? { ...existing, title, amount, dueDate, note, updatedAt: new Date().toISOString() } : makeAllocation({ title, amount, dueDate, note });
+      return { ...current, allocations: existing ? current.allocations.map((item) => item.id === id ? allocation : item) : [...current.allocations, allocation] };
+    }, id ? 'Allocation updated.' : 'Scope allocated.');
+    if (result.conflicted) conflictNotice = 'The latest allocation trail was used before your allocation change was saved.';
+    render();
+    closeModal();
+  } catch (err) { error.textContent = err instanceof Error ? err.message : 'The allocation could not be saved.'; }
 }
 
 async function verifyLicense(token: string, showResult = false) {
@@ -253,11 +331,26 @@ document.addEventListener('click', async (event) => {
   if (action === 'new-job') { if (!paid && jobs.length >= FREE_JOB_LIMIT) licenseModal(); else jobForm(); }
   if (action === 'close') closeModal();
   if (action === 'select-job') { selectedId = button.dataset.id || ''; render(); }
+  if (action === 'review-merged-job') { conflictNotice = ''; render(); }
   if (action === 'edit-job' && job) jobForm(job);
   if (action === 'new-allocation' && job) allocationForm(job);
   if (action === 'edit-allocation' && job) allocationForm(job, button.dataset.id);
-  if (action === 'delete-allocation' && job) { const item = job.allocations.find((a) => a.id === button.dataset.id); if (item && confirm(`Delete “${item.title}” from this deposit trail?`)) { job.allocations = job.allocations.filter((a) => a.id !== item.id); await mutate(job, 'Allocation deleted.'); } }
-  if (action === 'delete-job' && job && confirm(`Delete “${job.title}” and its complete allocation trail? This cannot be undone.`)) { await removeJob(job.id); jobs = await getJobs(); selectedId = jobs[0]?.id || ''; render(); say('Job deleted.'); }
+  if (action === 'delete-allocation' && job) {
+    const item = job.allocations.find((allocation) => allocation.id === button.dataset.id);
+    if (item && confirm(`Delete “${item.title}” from this deposit trail?`)) {
+      try {
+        const result = await persistJobMutation(job.id, job.revision || 0, (current) => {
+          if (!current.allocations.some((allocation) => allocation.id === item.id)) throw new Error('This allocation changed in another tab. The latest trail is shown below.');
+          return { ...current, allocations: current.allocations.filter((allocation) => allocation.id !== item.id) };
+        }, 'Allocation deleted.');
+        if (result.conflicted) { conflictNotice = 'The latest allocation trail was used before this deletion was saved.'; render(); }
+      } catch (err) { say(err instanceof Error ? err.message : 'The allocation could not be deleted.'); }
+    }
+  }
+  if (action === 'delete-job' && job && confirm(`Delete “${job.title}” and its complete allocation trail? This cannot be undone.`)) {
+    try { await removeJob(job.id); selectedId = ''; await refreshLedger(); notifyLedgerMutation(); say('Job deleted.'); }
+    catch (err) { say(err instanceof Error ? err.message : 'The job could not be deleted.'); }
+  }
   if (action === 'export-csv' && job) { download(jobCsv(job), `${filename(job.title)}-deposit-trail.csv`, 'text/csv;charset=utf-8'); say('CSV exported.'); }
   if (action === 'export-pdf' && job) { download(jobPdf(job), `${filename(job.title)}-deposit-trail.pdf`, 'application/pdf'); say('PDF exported.'); }
   if (action === 'backup') { download(JSON.stringify(backup(jobs), null, 2), `scope-ledger-backup-${today()}.json`, 'application/json'); say('Backup downloaded.'); }
@@ -270,10 +363,16 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', async (event) => {
   const select = (event.target as HTMLElement).closest<HTMLSelectElement>('select[data-action="status"]'); if (!select) return;
-  const job = selected(); const allocation = job?.allocations.find((a) => a.id === select.dataset.id); if (!job || !allocation) return;
-  const changed = transitionAllocation(allocation, select.value as AllocationStatus, today());
-  job.allocations = job.allocations.map((item) => item.id === allocation.id ? changed : item);
-  await mutate(job, `Marked “${changed.title}” ${changed.status}.`);
+  const job = selected(); const allocation = job?.allocations.find((item) => item.id === select.dataset.id); if (!job || !allocation) return;
+  try {
+    const result = await persistJobMutation(job.id, job.revision || 0, (current) => {
+      const latest = current.allocations.find((item) => item.id === allocation.id);
+      if (!latest) throw new Error('This allocation changed in another tab. The latest trail is shown below.');
+      const changed = transitionAllocation(latest, select.value as AllocationStatus, today());
+      return { ...current, allocations: current.allocations.map((item) => item.id === latest.id ? changed : item) };
+    }, `Marked “${allocation.title}” ${select.value}.`);
+    if (result.conflicted) { conflictNotice = 'The latest allocation trail was used before this status change was saved.'; render(); }
+  } catch (err) { await refreshLedger(); say(err instanceof Error ? err.message : 'The allocation status could not be updated.'); }
 });
 
 document.addEventListener('submit', async (event) => {
@@ -285,7 +384,7 @@ document.addEventListener('submit', async (event) => {
 
 importFile.addEventListener('change', async () => {
   const file = importFile.files?.[0]; if (!file) return;
-  try { const data = validateBackup(JSON.parse(await file.text())); if (!confirm(`Replace this device’s ledger with ${data.jobs.length} job${data.jobs.length === 1 ? '' : 's'} from the backup?`)) return; await replaceJobs(data.jobs); jobs = await getJobs(); selectedId = jobs[0]?.id || ''; render(); say('Backup restored.'); }
+  try { const data = validateBackup(JSON.parse(await file.text())); if (!confirm(`Replace this device’s ledger with ${data.jobs.length} job${data.jobs.length === 1 ? '' : 's'} from the backup?`)) return; await replaceJobs(data.jobs); selectedId = ''; await refreshLedger(); notifyLedgerMutation(); say('Backup restored.'); }
   catch (err) { say(err instanceof Error ? err.message : 'That backup could not be read.'); }
   finally { importFile.value = ''; }
 });

@@ -16,6 +16,8 @@ Live: <https://scope-deposit-ledger.sociobot.in>
 - Downloads a client-readable PDF or CSV for each job.
 - Exports and restores the complete ledger as JSON.
 - Stores all job data in IndexedDB and works after the network disappears.
+- Merges job-detail edits with the latest allocation trail when the ledger is
+  open in another tab, then asks the operator to review the merged trail.
 - Includes three jobs free. When the hosted Sociobot checkout is available, a
   $29 one-time license unlocks unlimited jobs. Exports, accessibility,
   backups, and offline use are never gated.
@@ -42,8 +44,8 @@ npm run test:e2e
 
 `npm run build` is the deployment command. It creates `dist/` with
 `dist/index.html` at its root. The Playwright suite uses Chromium 1.58.2 and
-checks the primary workflow, exports, persistence, offline reload, direct legal
-routes, console errors, and serious/critical axe violations.
+checks the primary workflow, two-tab conflict recovery, exports, persistence,
+offline reload, direct legal routes, console errors, and zero axe violations.
 
 ## Data and privacy
 

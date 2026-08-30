@@ -24,6 +24,12 @@ export interface Allocation {
 
 export interface Job {
   id: string;
+  /**
+   * Monotonic local revision used to detect another tab saving after this tab
+   * opened a form. It is optional only so schema-1 backups from before
+   * revisions remain importable.
+   */
+  revision?: number;
   title: string;
   client: string;
   reference: string;

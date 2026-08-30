@@ -48,8 +48,8 @@ Numbers use tabular figures. Spacing follows a 4 px base with core steps 8, 12,
 
 ## Motion policy
 
-New ledger rows settle from 6 px above over 180 ms; dialogs use a 220 ms opacity
-and translate transition; progress bars expand from their numerical origin over
+New ledger rows settle from 6 px above over 180 ms; dialogs rise 8 px over 220 ms
+without fading text through a low-contrast intermediate state; progress bars expand from their numerical origin over
 260 ms. There is no looping motion. Under `prefers-reduced-motion: reduce`, all
 movement and smooth scrolling become instant while hierarchy, outlines, and
 labels remain unchanged.

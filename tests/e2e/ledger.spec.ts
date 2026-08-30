@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const RELEASE_VERSION = '1.0.4';
+const RELEASE_VERSION = '1.0.5';
 
 async function createJob(page: import('@playwright/test').Page, title = 'Safe job') {
   await page.getByRole('button', { name: 'Record a deposit' }).click();
@@ -12,9 +12,29 @@ async function createJob(page: import('@playwright/test').Page, title = 'Safe jo
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
 }
 
-async function expectNoSeriousAxe(page: import('@playwright/test').Page) {
+async function expectNoAxeViolations(page: import('@playwright/test').Page) {
   const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.filter((item) => ['serious', 'critical'].includes(item.impact || ''))).toEqual([]);
+  expect(results.violations).toEqual([]);
+}
+
+async function readStoredJob(page: import('@playwright/test').Page, title: string) {
+  return page.evaluate(async (jobTitle) => new Promise<{
+    title: string;
+    notes: string;
+    allocations: Array<{ title: string; status: string; statusHistory?: Array<{ status: string }> }>;
+  } | undefined>((resolve, reject) => {
+    const request = indexedDB.open('scope-deposit-ledger');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const transaction = request.result.transaction('jobs', 'readonly');
+      const jobs = transaction.objectStore('jobs').getAll();
+      jobs.onerror = () => reject(jobs.error);
+      jobs.onsuccess = () => {
+        request.result.close();
+        resolve(jobs.result.find((job) => job.title === jobTitle));
+      };
+    };
+  }), title);
 }
 
 test('records, allocates, persists and exports a deposit trail', async ({ page }) => {
@@ -51,6 +71,47 @@ test('records, allocates, persists and exports a deposit trail', async ({ page }
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Workshop cabinetry' })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('merges a stale job-detail save without losing newer allocations or their status history', async ({ page, context }) => {
+  await page.goto('/');
+  await createJob(page, 'Concurrent ledger');
+
+  const secondTab = await context.newPage();
+  await secondTab.goto('/');
+  await expect(secondTab.getByRole('heading', { name: 'Concurrent ledger' })).toBeVisible();
+
+  // Keep this form's revision and allocation snapshot stale, exactly as an
+  // operator can when they start an unrelated scope-note edit in another tab.
+  await secondTab.getByRole('button', { name: 'Edit job' }).click();
+  await secondTab.getByLabel('Scope note').fill('Client approved the revised cabinet finish.');
+
+  await page.getByRole('button', { name: 'Allocate scope' }).click();
+  await page.getByLabel(/Milestone or scope item/).fill('Materials');
+  await page.getByLabel(/^Amount/).fill('400');
+  await page.getByRole('button', { name: 'Add to trail' }).click();
+  await page.getByLabel('Status for Materials').selectOption('earned');
+  await expect(page.getByText(/held .* → earned/)).toBeVisible();
+  await expect(secondTab.getByText('Ledger updated in another tab.')).toBeVisible();
+
+  await secondTab.getByRole('button', { name: 'Save changes' }).click();
+  await expect(secondTab.getByText('Another tab changed this job.')).toBeVisible();
+  await expect(secondTab.getByRole('button', { name: 'Review latest trail' })).toBeVisible();
+  await page.reload();
+
+  await expect(page.getByText('Materials', { exact: true })).toBeVisible();
+  await expect(page.getByText(/held .* → earned/)).toBeVisible();
+  await expect(page.getByText('Client approved the revised cabinet finish.')).toBeVisible();
+
+  const stored = await readStoredJob(page, 'Concurrent ledger');
+  expect(stored?.notes).toBe('Client approved the revised cabinet finish.');
+  expect(stored?.allocations).toHaveLength(1);
+  expect(stored?.allocations[0]).toMatchObject({
+    title: 'Materials',
+    status: 'earned',
+    statusHistory: [{ status: 'held' }, { status: 'earned' }]
+  });
+  await secondTab.close();
 });
 
 test('reconciles an invalid cached or return license by locking and showing a quiet notice', async ({ page }) => {
@@ -91,7 +152,7 @@ test('does not advertise an unbuyable Unlimited checkout when the verifier 404 i
 test('works offline after first load and has no serious accessibility violations', async ({ page, context }) => {
   await page.goto('/');
   await page.waitForFunction(() => navigator.serviceWorker?.controller !== null);
-  await expectNoSeriousAxe(page);
+  await expectNoAxeViolations(page);
   await context.setOffline(true);
   await expect(page.getByText(/Offline · changes still save/)).toBeVisible();
   await page.reload();
@@ -148,15 +209,15 @@ test('has accessible populated, dialog, and dark states and a working skip link'
   await page.keyboard.press('Enter');
   await expect(page.locator('main')).toBeFocused();
   await createJob(page, 'Accessible job');
-  await expectNoSeriousAxe(page);
+  await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Allocate scope' }).click();
-  await expectNoSeriousAxe(page);
+  await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Switch color theme' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
-  await expectNoSeriousAxe(page);
+  await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Allocate scope' }).click();
-  await expectNoSeriousAxe(page);
+  await expectNoAxeViolations(page);
 });
 
 test('stamps the installed start URL and active cache with this release version', async ({ page }) => {
