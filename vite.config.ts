@@ -16,6 +16,7 @@ export default defineConfig({
       },
       input: {
         main: 'index.html',
+        notFound: '404.html',
         privacy: 'privacy/index.html',
         terms: 'terms/index.html'
       }

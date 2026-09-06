@@ -1,0 +1,100 @@
+[
+  {
+    "id": "demo-isolation",
+    "claim": "The one-click sample uses separate storage, resets, and does not change the normal ledger.",
+    "where": "home sample action, demo banner, privacy page, README",
+    "test": "npm run test:claims -- --grep @claim:demo-isolation",
+    "sandbox": "clean browser; create a normal job, change and reset the demo, leave demo, and verify the normal job is unchanged"
+  },
+  {
+    "id": "ledger-details",
+    "claim": "Records the client, scope, deposit, date, currency, and tax assumption.",
+    "where": "How it works, README",
+    "test": "npm run test:claims -- --grep @claim:ledger-details",
+    "sandbox": "fresh /demo ledger; inspect the populated display and stored sample record"
+  },
+  {
+    "id": "allocation-limit",
+    "claim": "Prevents allocations above the deposit balance.",
+    "where": "How it works, README",
+    "test": "npm run test:claims -- --grep @claim:allocation-limit",
+    "sandbox": "fresh /demo ledger; reject one cent over the balance and accept the exact balance"
+  },
+  {
+    "id": "status-history",
+    "claim": "Keeps dated held, earned, and returned history.",
+    "where": "home, terms, README",
+    "test": "npm run test:claims -- --grep @claim:status-history",
+    "sandbox": "fresh /demo ledger; make two status changes, reload, and inspect the stored event sequence"
+  },
+  {
+    "id": "csv-export",
+    "claim": "Exports a client-readable CSV allocation trail.",
+    "where": "home, ledger, README",
+    "test": "npm run test:claims -- --grep @claim:csv-export",
+    "sandbox": "fresh /demo ledger; download CSV and assert job, allocation, tax assumption, and limitation content"
+  },
+  {
+    "id": "pdf-export",
+    "claim": "Exports a client-readable PDF allocation trail.",
+    "where": "home, ledger, README",
+    "test": "npm run test:claims -- --grep @claim:pdf-export",
+    "sandbox": "fresh /demo ledger; download PDF and decode its job, client, allocation, tax, and limitation text"
+  },
+  {
+    "id": "json-backup",
+    "claim": "Exports and restores the complete ledger as JSON.",
+    "where": "privacy page, terms, README",
+    "test": "npm run test:claims -- --grep @claim:json-backup",
+    "sandbox": "fresh /demo ledger; download backup, delete the sample, restore it, and verify allocations and status history"
+  },
+  {
+    "id": "on-device-data",
+    "claim": "Keeps job and client records in the browser unless the operator exports them.",
+    "where": "home facts, privacy page, README",
+    "test": "npm run test:claims -- --grep @claim:on-device-data",
+    "sandbox": "fresh /demo ledger; save a change, inspect the demo IndexedDB database, and record all requests"
+  },
+  {
+    "id": "offline-reload",
+    "claim": "Works offline after the first visit.",
+    "where": "home facts, privacy page, terms, README",
+    "test": "npm run test:claims -- --grep @claim:offline-reload",
+    "sandbox": "own fresh browser context at /demo; wait for service worker, remove the network, reload, and verify the populated ledger"
+  },
+  {
+    "id": "cross-tab-merge",
+    "claim": "Keeps newer allocation history when a stale tab saves job details.",
+    "where": "README",
+    "test": "npm run test:claims -- --grep @claim:cross-tab-merge",
+    "sandbox": "fresh /demo ledger in two tabs; change status in one, save stale notes in the other, and verify both survive"
+  },
+  {
+    "id": "free-core",
+    "claim": "Includes three jobs and data exports without a license.",
+    "where": "home facts, paid section, terms, README",
+    "test": "npm run test:claims -- --grep @claim:free-core",
+    "sandbox": "fresh /demo ledger without license; create up to three jobs, export, then verify the fourth opens purchase options"
+  },
+  {
+    "id": "license-daily-check",
+    "claim": "Checks a stored license no more than once per day and keeps an invalid-license notice visible.",
+    "where": "privacy page, README",
+    "test": "npm run test:claims -- --grep @claim:license-daily-check",
+    "sandbox": "fresh /demo ledger with an expired cached verdict and recorded verification fixture; reload and assert one request plus persistent notice"
+  },
+  {
+    "id": "no-tracking",
+    "claim": "Uses no analytics, advertising cookies, third-party fonts, tracking scripts, or third-party requests during ledger work.",
+    "where": "home privacy section, footer, privacy page, README",
+    "test": "npm run test:claims -- --grep @claim:no-tracking",
+    "sandbox": "fresh /demo ledger; perform a status change and export while recording requests, cookies, scripts, and styles"
+  },
+  {
+    "id": "paid-offer",
+    "claim": "When checkout is available, $29 paid once removes the three-job limit through Sociobot checkout.",
+    "where": "home paid section, terms, README",
+    "test": "npm run test:claims -- --grep @claim:paid-offer",
+    "sandbox": "fresh /demo ledger with recorded enabled-status and hosted-checkout fixtures; assert price, paid feature, and checkout destination"
+  }
+]

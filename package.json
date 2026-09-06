@@ -1,14 +1,15 @@
 {
   "name": "scope-deposit-ledger",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build && node scripts/stamp-release.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run tests/core.test.ts tests/release.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:claims": "playwright test tests/e2e/claims.spec.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",

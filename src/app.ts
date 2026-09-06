@@ -1,17 +1,20 @@
 import './styles.css';
 import { allocationStatusHistory, backup, CURRENCIES, jobCsv, makeAllocation, money, parseMoney, totals, transitionAllocation, validateAllocation, validateBackup } from './core';
-import { createJob, getJobs, mutateStoredJob, removeJob, replaceJobs, updateJobDetails } from './db';
+import { createJob, DEMO_MODE, getJobs, mutateStoredJob, removeJob, replaceJobs, updateJobDetails } from './db';
 import { jobPdf } from './pdf';
+import { sampleJobs } from './sample';
 import type { AllocationStatus, Job } from './types';
 
 const SLUG = 'scope-deposit-ledger';
-const LICENSE_KEY = `sb_license:${SLUG}`;
+const STORAGE_PREFIX = DEMO_MODE ? 'demo:' : '';
+const LICENSE_KEY = `${STORAGE_PREFIX}sb_license:${SLUG}`;
 const VERDICT_KEY = `${LICENSE_KEY}:verdict`;
 const BILLING = 'https://api.sociobot.in/api/v1';
 const CHECKOUT_URL = `${BILLING}/products/${SLUG}/checkout`;
 const CHECKOUT_STATUS_URL = '/checkout-status.json';
 const FREE_JOB_LIMIT = 3;
-const SYNC_KEY = `${SLUG}:last-mutation`;
+const SYNC_KEY = `${STORAGE_PREFIX}${SLUG}:last-mutation`;
+const THEME_KEY = `${STORAGE_PREFIX}scope-ledger-theme`;
 declare const __RELEASE_VERSION__: string;
 
 const app = document.querySelector<HTMLElement>('#ledger-app')!;
@@ -27,7 +30,7 @@ let conflictNotice = '';
 let toastTimer = 0;
 const tabId = crypto.randomUUID();
 const seenMutationIds = new Set<string>();
-const ledgerChannel = 'BroadcastChannel' in window ? new BroadcastChannel(`${SLUG}:changes`) : null;
+const ledgerChannel = 'BroadcastChannel' in window ? new BroadcastChannel(`${STORAGE_PREFIX}${SLUG}:changes`) : null;
 
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]!);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -54,6 +57,31 @@ function openModal(markup: string) {
 }
 
 function closeModal() { dialog.close(); dialogContent.replaceChildren(); }
+
+function configureRoute() {
+  const title = DEMO_MODE ? 'Demo — Scope Deposit Ledger' : 'Scope Deposit Ledger — Track deposits against work';
+  const description = DEMO_MODE
+    ? 'Try a separate sample deposit ledger without changing your own records.'
+    : 'Track each client deposit against agreed work, with dated balances and local PDF or CSV exports.';
+  document.title = title;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', description);
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', DEMO_MODE
+    ? 'https://scope-deposit-ledger.sociobot.in/demo'
+    : 'https://scope-deposit-ledger.sociobot.in/');
+  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', title);
+  document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', description);
+  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute('content', DEMO_MODE
+    ? 'https://scope-deposit-ledger.sociobot.in/demo'
+    : 'https://scope-deposit-ledger.sociobot.in/');
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute('content', title);
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')?.setAttribute('content', description);
+  document.querySelector<HTMLElement>('#page-title')!.textContent = DEMO_MODE
+    ? 'Review a sample deposit trail.'
+    : 'Track deposits against agreed work.';
+  document.body.classList.toggle('demo-mode', DEMO_MODE);
+  document.querySelector<HTMLElement>('#demo-banner')!.hidden = !DEMO_MODE;
+  document.querySelectorAll<HTMLElement>('[data-release]').forEach((node) => { node.textContent = `Version ${__RELEASE_VERSION__}`; });
+}
 
 function jobForm(job?: Job) {
   const currencies = CURRENCIES.map((code) => `<option ${job?.currency === code ? 'selected' : ''}>${code}</option>`).join('');
@@ -133,7 +161,7 @@ async function startCheckout() {
 function licenseModal() {
   const token = localStorage.getItem(LICENSE_KEY) || '';
   openModal(`<section class="license-panel">
-    <div class="dialog-head"><div><p class="eyebrow">A durable tool, once</p><h2 id="dialog-title">Unlock unlimited jobs</h2></div><button class="icon-button" type="button" data-action="close" aria-label="Close dialog">×</button></div>
+    <div class="dialog-head"><div><p class="eyebrow">Unlimited jobs</p><h2 id="dialog-title">Buy or restore Unlimited</h2></div><button class="icon-button" type="button" data-action="close" aria-label="Close dialog">×</button></div>
     <div data-checkout-state>${checkoutMarkup('checking')}</div>
     <hr />
     <form data-form="license"><label>Have a license? Paste it here<input name="license" autocomplete="off" value="${esc(token)}" /></label><p class="form-error" role="alert"></p><button class="quiet-button full" type="submit">Verify and restore</button></form>
@@ -185,9 +213,33 @@ function render() {
     <div class="index-head"><div><p class="eyebrow">Your ledger</p><h2>${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}</h2></div><button class="icon-button" data-action="new-job" aria-label="Add job" type="button">+</button></div>
     ${jobs.length ? `<nav aria-label="Choose a job"><ul>${jobs.map((job) => { const t = totals(job); return `<li><button class="job-tab ${job.id === selectedId ? 'active' : ''}" data-action="select-job" data-id="${job.id}" type="button"><span>${esc(job.title)}</span><small>${esc(job.client)}</small><strong>${money(t.held + t.unallocated, job.currency)} held</strong></button></li>`; }).join('')}</ul></nav>` : `<div class="index-empty"><span aria-hidden="true">01</span><p>Your first deposit starts here.</p></div>`}
     <div class="data-tools"><button class="link-button" data-action="backup" type="button">Back up all</button><button class="link-button" data-action="import" type="button">Restore</button></div>
-    <button class="unlock-card ${paid ? 'is-paid' : ''}" data-action="license" type="button"><span>${paid ? 'Unlimited unlocked' : 'Free · 3 jobs'}</span><small>${paid ? 'License active on this device' : 'Check Unlimited availability →'}</small></button>
+    <button class="unlock-card ${paid ? 'is-paid' : ''}" data-action="license" type="button"><span>${DEMO_MODE ? 'Demo ledger' : paid ? 'Unlimited active' : 'Free · 3 jobs'}</span><small>${DEMO_MODE ? 'Sample changes stay separate' : paid ? 'License active on this device' : 'Check Unlimited availability →'}</small></button>
   </aside>
-  ${current ? summaryMarkup(current) : `<section class="empty-ledger"><div class="empty-number">01</div><p class="eyebrow">Begin with the agreement</p><h2>Give held money a named place.</h2><p>Record the deposit, split it across agreed work, then share a balance trail your client can read without an accounting login.</p><button class="button" data-action="new-job" type="button">Record your first deposit</button><ul><li>Private on this device</li><li>PDF and CSV included</li><li>Works without a connection</li></ul></section>`}`;
+  ${current ? summaryMarkup(current) : `<section class="empty-ledger"><div class="empty-number">01</div><p class="eyebrow">New ledger</p><h2>Start your deposit record.</h2><p>Record the deposit, split it across agreed work, then share a balance trail your client can read.</p><button class="button" data-action="new-job" type="button">Record your first deposit</button><ul><li>Saved on this device</li><li>PDF and CSV exports</li><li>Available offline after your first visit</li></ul></section>`}`;
+}
+
+async function resetDemo() {
+  if (!DEMO_MODE) return;
+  if (dialog.open) closeModal();
+  localStorage.removeItem(LICENSE_KEY);
+  localStorage.removeItem(VERDICT_KEY);
+  paid = false;
+  licenseNotice = '';
+  conflictNotice = '';
+  await replaceJobs(sampleJobs());
+  selectedId = sampleJobs()[0].id;
+  await refreshLedger();
+  notifyLedgerMutation();
+  say('Demo reset to the original sample.');
+}
+
+async function startForReal() {
+  if (!DEMO_MODE) return;
+  await replaceJobs([]);
+  localStorage.removeItem(LICENSE_KEY);
+  localStorage.removeItem(VERDICT_KEY);
+  localStorage.removeItem(THEME_KEY);
+  location.assign('/');
 }
 
 async function refreshLedger() {
@@ -320,14 +372,28 @@ async function verifyLicense(token: string, showResult = false) {
 
 async function initLicense() {
   const params = new URLSearchParams(location.search); const returned = params.get('license');
-  if (returned) { localStorage.setItem(LICENSE_KEY, returned); history.replaceState({}, '', location.pathname + location.hash); }
+  if (returned) {
+    localStorage.setItem(LICENSE_KEY, returned);
+    params.delete('license');
+    const query = params.toString();
+    history.replaceState({}, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+  }
   const token = returned || localStorage.getItem(LICENSE_KEY); if (!token) return;
-  try { const cached = JSON.parse(localStorage.getItem(VERDICT_KEY) || '{}') as { valid?: boolean; checkedAt?: number }; paid = cached.valid === true; if (!cached.checkedAt || Date.now() - cached.checkedAt > 86400000 || returned) void verifyLicense(token, Boolean(returned)); } catch { /* ignore damaged cache */ }
+  try {
+    const cached = JSON.parse(localStorage.getItem(VERDICT_KEY) || '{}') as { valid?: boolean; checkedAt?: number };
+    paid = cached.valid === true;
+    licenseNotice = cached.checkedAt && cached.valid === false
+      ? 'Your Unlimited license is no longer active. Your local records and exports are unchanged.'
+      : '';
+    if (!cached.checkedAt || Date.now() - cached.checkedAt > 86400000 || returned) void verifyLicense(token, Boolean(returned));
+  } catch { /* ignore damaged cache */ }
 }
 
 document.addEventListener('click', async (event) => {
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action]'); if (!button) return;
   const action = button.dataset.action; const job = selected();
+  if (action === 'reset-demo') await resetDemo();
+  if (action === 'start-real') await startForReal();
   if (action === 'new-job') { if (!paid && jobs.length >= FREE_JOB_LIMIT) licenseModal(); else jobForm(); }
   if (action === 'close') closeModal();
   if (action === 'select-job') { selectedId = button.dataset.id || ''; render(); }
@@ -394,16 +460,26 @@ function networkState() { network.innerHTML = navigator.onLine ? '<span aria-hid
 addEventListener('online', networkState); addEventListener('offline', networkState); networkState();
 
 const themeButton = document.querySelector<HTMLButtonElement>('#theme-toggle')!;
-function setTheme(theme: string) { document.documentElement.dataset.theme = theme; themeButton.textContent = theme === 'night' ? 'Day' : 'Night'; localStorage.setItem('scope-ledger-theme', theme); }
+function setTheme(theme: string) { document.documentElement.dataset.theme = theme; themeButton.textContent = theme === 'night' ? 'Day' : 'Night'; localStorage.setItem(THEME_KEY, theme); }
 themeButton.addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'night' ? 'day' : 'night'));
-setTheme(localStorage.getItem('scope-ledger-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day'));
+setTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day'));
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(__RELEASE_VERSION__)}`).then((registration) => {
   registration.addEventListener('updatefound', () => { const worker = registration.installing; worker?.addEventListener('statechange', () => { if (worker.state === 'installed' && navigator.serviceWorker.controller) { say('A fresh version is ready. Reload to update.'); } }); });
 }).catch(() => { /* app remains usable without install support */ });
 
 async function start() {
-  try { await initLicense(); jobs = await getJobs(); selectedId = jobs[0]?.id || ''; render(); }
+  try {
+    configureRoute();
+    await initLicense();
+    jobs = await getJobs();
+    if (DEMO_MODE && jobs.length === 0) {
+      await replaceJobs(sampleJobs());
+      jobs = await getJobs();
+    }
+    selectedId = jobs[0]?.id || '';
+    render();
+  }
   catch (err) { app.innerHTML = `<section class="storage-error" role="alert"><p class="eyebrow">Storage unavailable</p><h2>Your ledger could not open.</h2><p>${esc(err instanceof Error ? err.message : 'Check this browser’s site-storage settings and reload.')}</p><button class="button" data-action="storage-retry" type="button">Try again</button></section>`; }
 }
 void start();

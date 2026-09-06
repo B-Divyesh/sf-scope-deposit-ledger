@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const RELEASE_VERSION = '1.0.5';
+const RELEASE_VERSION = '1.0.6';
 
 async function createJob(page: import('@playwright/test').Page, title = 'Safe job') {
   await page.getByRole('button', { name: 'Record a deposit' }).click();
@@ -114,7 +114,7 @@ test('merges a stale job-detail save without losing newer allocations or their s
   await secondTab.close();
 });
 
-test('reconciles an invalid cached or return license by locking and showing a quiet notice', async ({ page }) => {
+test('reconciles an invalid cached or return license by locking and keeping a quiet notice after reload', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sb_license:scope-deposit-ledger', 'stale-license');
     localStorage.setItem('sb_license:scope-deposit-ledger:verdict', JSON.stringify({ valid: true, checkedAt: 0 }));
@@ -124,8 +124,11 @@ test('reconciles an invalid cached or return license by locking and showing a qu
   });
   await page.goto('/?license=qa-invalid-token');
   await expect(page.getByText(/Unlimited license is no longer active/)).toBeVisible();
-  await expect(page.getByText('Unlimited unlocked')).toHaveCount(0);
+  await expect(page.getByText('Unlimited active')).toHaveCount(0);
   await expect(page).not.toHaveURL(/license=/);
+  await page.reload();
+  await expect(page.getByText(/Unlimited license is no longer active/)).toBeVisible();
+  await expect(page.getByText('Unlimited active')).toHaveCount(0);
 });
 
 test('does not advertise an unbuyable Unlimited checkout when the verifier 404 is returned', async ({ page }) => {
@@ -156,7 +159,7 @@ test('works offline after first load and has no serious accessibility violations
   await context.setOffline(true);
   await expect(page.getByText(/Offline · changes still save/)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Show exactly what the deposit covers.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Track deposits against agreed work.' })).toBeVisible();
 });
 
 test('rejects invalid amounts and blank scope names without changing the form', async ({ page }) => {
@@ -235,16 +238,81 @@ test('keeps the populated ledger usable at a 390px mobile viewport', async ({ pa
   await createJob(page, 'Mobile job');
   await expect(page.getByRole('button', { name: 'Allocate scope' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  for (const target of [page.getByRole('button', { name: 'New job' }), page.getByRole('link', { name: 'Privacy' }), page.getByRole('link', { name: 'Terms' })]) {
+  const footer = page.getByRole('contentinfo');
+  for (const target of [page.getByRole('button', { name: 'New job' }), footer.getByRole('link', { name: 'Privacy' }), footer.getByRole('link', { name: 'Terms' })]) {
     const box = await target.boundingBox();
     expect(box?.width).toBeGreaterThanOrEqual(44);
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
 });
 
-test('privacy and terms are available as direct static routes', async ({ page }) => {
+test('states the job, audience, and sample action on the first phone screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Track deposits against agreed work.' })).toBeVisible();
+  await expect(page.getByText(/For solo trades and service operators/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Try it with sample data' })).toBeVisible();
+  await expect(page.getByText('Saved on your device')).toBeVisible();
+  await expect(page.getByText('Works offline after your first visit')).toBeVisible();
+  await expect(page.getByText('Three jobs and all exports are free')).toBeVisible();
+  const actionBox = await page.getByRole('link', { name: 'Try it with sample data' }).boundingBox();
+  expect(actionBox && actionBox.y + actionBox.height).toBeLessThanOrEqual(844);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});
+
+test('uses route-specific titles, metadata, landmarks, and accessible legal and not-found pages', async ({ page }) => {
+  await page.goto('/demo');
+  await expect(page).toHaveTitle('Demo — Scope Deposit Ledger');
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://scope-deposit-ledger.sociobot.in/demo');
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.getByText('Demo — sample data, nothing is saved to your ledger.')).toBeVisible();
+  await expectNoAxeViolations(page);
+
   await page.goto('/privacy/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Privacy stays on your device.');
+  await expect(page).toHaveTitle('Privacy — Scope Deposit Ledger');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('See what stays on your device.');
+  await expectNoAxeViolations(page);
+
   await page.goto('/terms/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('A record aid, not an accountant.');
+  await expect(page).toHaveTitle('Terms — Scope Deposit Ledger');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Use this as a deposit record.');
+  await expectNoAxeViolations(page);
+
+  await page.goto('/404.html');
+  await expect(page).toHaveTitle('Page not found — Scope Deposit Ledger');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('This page was not found.');
+  await expect(page.getByRole('link', { name: 'Return to the ledger' })).toBeVisible();
+  await expectNoAxeViolations(page);
+});
+
+test('loads the offline fallback under a strict style policy without console errors', async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.route('**/offline.html', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      headers: { ...response.headers(), 'content-security-policy': "default-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'" }
+    });
+  });
+  await page.goto('/offline.html');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Open your saved ledger.');
+  await expect(page.getByRole('link', { name: 'Return to your ledger' })).toBeVisible();
+  expect(await page.locator('body').evaluate((element) => getComputedStyle(element).fontSize)).toBe('18px');
+  await expectNoAxeViolations(page);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('removes interface motion when reduced motion is requested', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/demo');
+  await page.getByRole('button', { name: 'Edit job' }).click();
+  expect(await page.getByRole('dialog').evaluate((element) => ({
+    animation: getComputedStyle(element).animationName,
+    transition: getComputedStyle(element).transitionDuration
+  }))).toEqual({ animation: 'none', transition: '0s' });
+  expect(await page.locator('.progress').evaluate((element) => getComputedStyle(element).transitionDuration)).toBe('0s');
 });

@@ -1,7 +1,9 @@
 import { allocationStatusHistory, money, totals } from './core';
 import type { Job } from './types';
 
-const DB_NAME = 'scope-deposit-ledger';
+export const DEMO_MODE = location.pathname.replace(/\/$/, '') === '/demo'
+  || new URLSearchParams(location.search).get('demo') === '1';
+export const DB_NAME = DEMO_MODE ? 'demo:scope-deposit-ledger' : 'scope-deposit-ledger';
 const STORE = 'jobs';
 
 function openDb(): Promise<IDBDatabase> {
@@ -18,9 +20,24 @@ async function transact<T>(mode: IDBTransactionMode, work: (store: IDBObjectStor
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, mode);
     const request = work(tx.objectStore(STORE));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(new Error('The ledger could not be saved on this device.'));
-    tx.oncomplete = () => db.close();
+    let result: T;
+    let settled = false;
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      db.close();
+      reject(new Error('The ledger could not be saved on this device.'));
+    };
+    request.onsuccess = () => { result = request.result; };
+    request.onerror = fail;
+    tx.onerror = fail;
+    tx.onabort = fail;
+    tx.oncomplete = () => {
+      if (settled) return;
+      settled = true;
+      db.close();
+      resolve(result!);
+    };
   });
 }
 

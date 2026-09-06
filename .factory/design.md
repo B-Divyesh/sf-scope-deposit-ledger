@@ -58,8 +58,12 @@ labels remain unchanged.
 
 - `public/assets/ledger-garden.webp`: original generated landscape hero,
   responsive crop, high priority, ≤300 KB.
+- `public/assets/scope-ledger-social.jpg`: 1200×630 centre crop derived from
+  the original ledger garden for Open Graph and social previews.
 - `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`: original
   hand-authored compass/ledger mark rasterized from project SVG; no outside art.
+- `public/icons/favicon.svg` and `apple-touch-icon.png`: hand-authored ledger
+  mark and a local 180 px raster derivative.
 - Interface icons are hand-authored inline SVG with accessible text labels.
 
 ### Hero prompt sheet
@@ -79,3 +83,5 @@ Generated with the factory image deployment (`factory-image`, Azure AI Foundry)
 on 2026-08-28 via `/opt/fleet/lib/gen-image.sh`. Generated imagery is original
 for this product. The selected asset was visually reviewed for text artifacts,
 seams, unintended symbols, and palette consistency, then optimized locally.
+The social crop and touch icon were derived locally on 2026-09-06; they add no
+outside source material.

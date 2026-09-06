@@ -23,7 +23,10 @@ const precache = allFiles
   .sort();
 const sw = swTemplate
   .replaceAll('__RELEASE_VERSION__', version)
-  .replace('__PRECACHE_URLS__', JSON.stringify(['/', '/manifest.webmanifest', ...precache]));
+  // Precache both demo route spellings. A newly installed worker did not
+  // control the first /demo request, so an immediate offline reload otherwise
+  // fell back to / and left the isolated sample mode.
+  .replace('__PRECACHE_URLS__', JSON.stringify(['/', '/demo', '/demo/', '/manifest.webmanifest', ...precache]));
 const manifest = (await readFile(join(root, 'public/manifest.webmanifest'), 'utf8')).replaceAll('__RELEASE_VERSION__', version);
 await writeFile(join(dist, 'sw.js'), sw);
 await writeFile(join(dist, 'manifest.webmanifest'), manifest);

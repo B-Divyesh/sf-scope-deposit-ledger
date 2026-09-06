@@ -4,19 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f4f0e6" />
-    <meta name="description" content="A private, offline ledger that shows exactly what a client deposit is held against." />
+    <meta name="description" content="Track each client deposit against agreed work, with dated balances and local PDF or CSV exports." />
+    <link rel="canonical" href="https://scope-deposit-ledger.sociobot.in/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Scope Deposit Ledger" />
+    <meta property="og:title" content="Scope Deposit Ledger — Track deposits against work" />
+    <meta property="og:description" content="Track each client deposit against agreed work, with dated balances and local PDF or CSV exports." />
+    <meta property="og:url" content="https://scope-deposit-ledger.sociobot.in/" />
+    <meta property="og:image" content="https://scope-deposit-ledger.sociobot.in/assets/scope-ledger-social.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A measured deposit flowing into three named work channels." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Scope Deposit Ledger — Track deposits against work" />
+    <meta name="twitter:description" content="Track each client deposit against agreed work, with dated balances and local PDF or CSV exports." />
+    <meta name="twitter:image" content="https://scope-deposit-ledger.sociobot.in/assets/scope-ledger-social.jpg" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preload" href="/fonts/atkinson-regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
-    <title>Scope Deposit Ledger — Know what every deposit covers</title>
+    <title>Scope Deposit Ledger — Track deposits against work</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to ledger</a>
+    <section class="demo-banner" id="demo-banner" aria-label="Demo status" hidden>
+      <p><strong>Demo</strong> — sample data, nothing is saved to your ledger.</p>
+      <div><button class="link-button" data-action="reset-demo" type="button">Reset demo</button><button class="button small" data-action="start-real" type="button">Start for real</button></div>
+    </section>
     <header class="masthead">
       <a class="wordmark" href="/" aria-label="Scope Deposit Ledger home">
         <span class="mark" aria-hidden="true">§</span><span>Scope Deposit Ledger</span>
       </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="/demo">Demo</a><a href="/#how-it-works">How it works</a><a href="/privacy/">Privacy</a>
+      </nav>
       <div class="header-actions">
         <span id="network-state" class="network" role="status"><span aria-hidden="true">●</span> On-device</span>
         <button class="quiet-button" id="theme-toggle" type="button" aria-label="Switch color theme">Night</button>
@@ -26,25 +48,47 @@
     <main id="main" tabindex="-1">
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
-          <p class="eyebrow">A private record of held money</p>
-          <h1 id="page-title">Show exactly what the deposit covers.</h1>
-          <p>Turn one advance payment into a clear, dated trail of scope—held, earned, or returned. No invoice suite required.</p>
-          <button class="button" data-action="new-job" type="button">Record a deposit</button>
-          <p class="trust-note"><span aria-hidden="true">⌁</span> Saved only on this device · works offline</p>
+          <p class="eyebrow">Deposit allocation record</p>
+          <h1 id="page-title">Track deposits against agreed work.</h1>
+          <p>For solo trades and service operators who need a clear record of held, earned, and returned money.</p>
+          <div class="hero-actions"><a class="button" href="/demo">Try it with sample data</a><button class="quiet-button" data-action="new-job" type="button">Record a deposit</button></div>
+          <p class="action-note">The sample opens a separate ledger with realistic entries.</p>
+          <ul class="plain-facts"><li>Saved on your device</li><li>Works offline after your first visit</li><li>Three jobs and all exports are free</li></ul>
         </div>
         <picture class="hero-art">
           <source media="(max-width: 700px)" srcset="/assets/ledger-garden-720.webp" />
-          <img src="/assets/ledger-garden.webp" width="1280" height="853" alt="A coral glass vessel pours golden material into three measured green stone channels." decoding="async" fetchpriority="high" />
+          <img src="/assets/ledger-garden.webp" width="1280" height="853" alt="A coral vessel divides one deposit into three measured work channels." decoding="async" fetchpriority="high" />
         </picture>
       </section>
+
       <div id="ledger-app" class="app-shell">
         <p class="loading-state" role="status">Opening your on-device ledger…</p>
       </div>
+
+      <section class="info-section steps" id="how-it-works" aria-labelledby="how-title">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-title">Keep one trail from deposit to balance.</h2>
+        <ol>
+          <li><strong>Record the deposit.</strong><span>Add the client, amount, date, currency, scope, and tax assumption.</span></li>
+          <li><strong>Allocate agreed work.</strong><span>Add milestones without assigning more than the deposit.</span></li>
+          <li><strong>Share the trail.</strong><span>Mark held, earned, or returned amounts, then export PDF or CSV.</span></li>
+        </ol>
+      </section>
+
+      <section class="info-section limits" aria-labelledby="limits-title">
+        <div><p class="eyebrow">Privacy and limits</p><h2 id="limits-title">This is a local record, not accounting software.</h2></div>
+        <div><p>Job and client records stay in this browser unless you export them. The app has no analytics, advertising, or cloud ledger.</p><p>It does not process payments, calculate tax, issue invoices, or replace accounting advice.</p></div>
+      </section>
+
+      <section class="info-section paid-tier" aria-labelledby="paid-title">
+        <div><p class="eyebrow">Unlimited jobs</p><h2 id="paid-title">Pay $29 once when checkout is available.</h2></div>
+        <div><p>Unlimited removes the three-job limit. Exports, backups, accessibility, and offline use remain free.</p><p class="availability-note">New purchases are currently unavailable. Existing licenses can still be restored in the ledger.</p><button class="quiet-button" data-action="license" type="button">Check purchase or restore options</button></div>
+      </section>
     </main>
     <footer>
-      <p>Built for clear client conversations, not accounting advice.</p>
-      <nav aria-label="Legal and product links"><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><button class="link-button" type="button" data-action="license">Unlock</button></nav>
-      <p class="provenance">Original generated scenery · no analytics or trackers</p>
+      <p>Track each deposit against agreed work.</p>
+      <nav aria-label="Footer navigation"><a href="/demo">Demo</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></nav>
+      <p class="provenance">Built by Param Factory · <span data-release>Version</span> · Original generated scenery · no analytics</p>
     </footer>
     <dialog id="app-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

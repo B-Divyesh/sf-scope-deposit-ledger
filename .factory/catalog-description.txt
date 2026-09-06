@@ -1,0 +1,1 @@
+Track client deposits against agreed scope and export a clear dated balance trail.

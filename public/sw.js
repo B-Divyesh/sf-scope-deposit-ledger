@@ -1,8 +1,13 @@
 const CACHE = 'scope-ledger-shell-__RELEASE_VERSION__';
 const SHELL = __PRECACHE_URLS__;
+const cached = (request) => caches.match(request, { ignoreVary: true });
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Bypass the browser HTTP cache while building the offline cache. A
+  // conditional 304 response makes Cache.addAll reject and leaves no worker,
+  // which is most likely on a repeat visit or update.
+  const requests = SHELL.map((url) => new Request(url, { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(requests)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -16,10 +21,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(fetch(event.request).then((response) => {
       const copy = response.clone(); caches.open(CACHE).then((cache) => cache.put(event.request, copy)); return response;
-    }).catch(async () => (await caches.match(event.request)) || (await caches.match('/')) || caches.match('/offline.html')));
+    }).catch(async () => (await cached(event.request)) || (await cached('/')) || cached('/offline.html')));
     return;
   }
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+  event.respondWith(cached(event.request).then((response) => response || fetch(event.request).then((response) => {
     if (response.ok) { const copy = response.clone(); caches.open(CACHE).then((cache) => cache.put(event.request, copy)); }
     return response;
   })));
