@@ -1,36 +1,27 @@
-# Independent verification 6 handoff — Scope Deposit Ledger
+# Review 1 handoff — Scope Deposit Ledger
 
 ## Result
 
 **PASS — 0 findings and 0 untested claims.**
 
-Independent verification reviewed implementation
-`9865da41bd9ee6ac9937d83f33aa323d207d87a1` and documentation
-`19db44414de93560e2a7157f8ce993d0b816c65a` against the live product at
-https://scope-deposit-ledger.sociobot.in. No product code was changed.
-
-The full report is `.factory/verification-6.md`.
+Review 1 examined live implementation
+`9865da41bd9ee6ac9937d83f33aa323d207d87a1` and report/documentation commit
+`f4721b4791f0e465554db1c2a990c6c2163bc114`. No product code was changed.
+The detailed result is `.factory/review-1.md`.
 
 ## What was verified
 
-- Fresh desktop and 390×844 phone first screens name the deposit-tracking job,
-  the solo trade/service audience, the sample action, and three factual limits
-  before scrolling.
-- The realistic CAD 4,250.75 sample uses a separate IndexedDB database. Its
-  label persists, reset restores the fixture, and leaving it clears demo data
-  without changing a normal job.
-- Normal, invalid, boundary, recovery, export, restore, dated-history,
-  cross-tab, license, and free-limit paths pass.
-- Keyboard focus, dialog behavior, light/dark contrast, 44 px phone targets,
-  reduced motion, 200% text, legal pages, privacy requests, links, route titles,
-  offline fallback, designed 404, service-worker control, offline reload, and
-  update notification pass.
-- All 14 declared claim commands pass separately. There are no unlisted or
-  untested public claims.
-- All 27 public build artifacts match production byte for byte.
-- Lighthouse 13.4.1 mobile scores 100 in Performance, Accessibility, Best
-  Practices, SEO, and Agentic Browsing. FCP is 1.1 s, LCP 1.5 s, TBT 0 ms,
-  CLS 0, and total transfer 147,793 bytes.
+- Fresh desktop and phone profiles state the job, audience, sample action, and
+  three facts before scrolling. Both had no console errors or overflow.
+- The CAD 4,250.75 demo is isolated from normal IndexedDB data; its label and
+  changed content persisted, reset restored it, and Start for real left a
+  normal job unchanged.
+- The clean checkout passed 11 unit tests, 28 browser tests, build/type gates,
+  and all 14 declared claim commands separately.
+- The live demo reloads offline under `scope-ledger-shell-1.0.6`, sets no
+  cookies, and made product-origin-only requests in the observed flow.
+- Privacy, terms, offline, and designed 404 routes passed title, h1, main,
+  language, and console checks. All 27 public build artifacts match live.
 
 ## How to verify
 
@@ -47,8 +38,8 @@ npm run test:claims
 ```
 
 Run each command in `.factory/claims.json` separately for the acceptance
-contract. Verification 6 recorded 11/11 unit tests, 28/28 browser tests, and
-14/14 individually run claim commands.
+contract. Review 1 recorded 11/11 unit tests, 28/28 browser tests, and 14/14
+individually run claim commands.
 
 ## Remaining external dependency
 
@@ -65,7 +56,6 @@ is confirmed.
 
 ## Evidence
 
-The complete report is `.factory/verification-6.md`. Supporting runtime files
-and screenshots are under `/work/.evidence/verify-6/`. The required factory
-copies are `/work/.evidence/qa-report.md` and
-`/work/.evidence/qa-result.json`.
+The complete report is `.factory/review-1.md`. Supporting runtime files and
+screenshots are under `/work/.evidence/review-1/`. The required factory copies
+are `/work/.evidence/qa-report.md` and `/work/.evidence/qa-result.json`.
